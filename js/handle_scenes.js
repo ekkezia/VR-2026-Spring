@@ -219,7 +219,7 @@ const addDemoButtons = (demoNames, scenesInit) => {
             // TODO: 
             // ...
          }
-         header.innerHTML += '<button id=srButton onclick=toggleSpeechRecognition();>Enable speech recognition</button><BR>';
+         // header.innerHTML += '<button id=srButton onclick=toggleSpeechRecognition();>Enable speech recognition</button><BR>';
       }
 
       const xrEntryUI = global.xrEntryUI();
