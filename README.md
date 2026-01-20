@@ -11,6 +11,10 @@ cd server
 npm install
 source patch
 ```
+If source patch does not work, try
+```sh
+sh patch_fixed.sh
+```
 
 # How to run on your local computer
 
