@@ -43,7 +43,7 @@ sh patch_fixed.sh
 
 # How to create your own demo
 
-1. Go to the [scenes folder](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/) and create a .js file based on the template of [example1.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/example1.js)
+1. Go to the [scenes folder](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/) and create a .js file based on the template of [shapes.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/shapes.js)
 2. Change the name and the content of the demo to whatever you like!
 3. Go to [scenes.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js), add the name of your demo and its path to the returned value of [```scenes```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js#L13)
 4. Note that the [```enableSceneReloading```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js#L12) is set to true so that you can hot-reload the changes in your demo. 
@@ -58,8 +58,3 @@ sh patch_fixed.sh
 6. Enable phase sync support (#webxr-phase-sync)
 7. Enable "Auto Enable Hands or Controllers" (Quest Settings (Gear Icon) -> Device -> Hands and Controllers)
 8. Enter the VR experience
-
-# Notes on customizing your avatar
-1. To change the initial position of your avatar: go to [js/util/inline-viewer-helper.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/inline-viewer-helper.js) and change the values of [```this.lookYaw```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/inline-viewer-helper.js#L46), [```this.walkPosition```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/inline-viewer-helper.js#L47), [```this.lookPitch```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/inline-viewer-helper.js#L49). Notice that [```this.viewerHeight```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/inline-viewer-helper.js#L50) (the avatar's height) is set to be 1.6m from the [```inlineViewerHelper.setHeight(1.6)```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/immersive-pre.js#L503) in [js/immersive-pre.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/immersive-pre.js). You can change this if you like.
-2. To customize your own avatar: go to [js/primitive/avatar.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/primitive/avatar.js). You can change the GLTF models used in the [```Headset```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/primitive/avatar.js#L101) and the [```Controller```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/primitive/avatar.js#L114) classes. You can add additional arguments to the [```initAvatar```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/primitive/avatar.js#L8) function to specify the avatar's look, and pass those values from the [```addPawn```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/util/croquetlib.js#L162) function.
-
