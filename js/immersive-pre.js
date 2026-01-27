@@ -542,8 +542,8 @@ window.isXR = () => isXRMode;
 function onRequestSession() {
     return navigator.xr
         .requestSession("immersive-ar", {
-            requiredFeatures: ["local-floor"],
-            optionalFeatures: ["hand-tracking", "layers", "mesh-detection", "depth-sensing", "shared"],
+            requiredFeatures: ["local-floor", "hand-tracking"],
+            optionalFeatures: ["layers", "mesh-detection", "depth-sensing", "shared"],
         })
         .then((session) => {
 	    isXRMode = true;
@@ -637,6 +637,16 @@ async function onSessionStarted(session) {
 
         xrRefSpace = refSpace;
         xrSession = session;
+
+        // initialize hand position storage and create an in-XR label if possible
+        window.latestHandPos = window.latestHandPos || {};
+        try {
+            if (typeof clay !== 'undefined' && clay.vrWidgets) {
+                window.xrHandLabel = clay.vrWidgets.add('label').info('index: n/a').move(0,2.2,-0.5).scale(.05);
+            }
+        } catch (e) {
+            console.warn('could not create xrHandLabel', e);
+        }
 
         if(refSpaceType == "bounded-floor"){
 
@@ -1122,6 +1132,29 @@ function onXRFrame(t, frame) {
     if (pose && resonanceScene) {
         resonanceScene.setListenerFromMatrix({ elements: pose.transform.matrix });
     }
+
+    // hand tracking
+        for (let inputSource of session.inputSources) {
+            if (inputSource.hand) {
+                // Get the index finger tip joint
+                const indexTip = inputSource.hand.get('index-finger-tip');
+                if (indexTip) {
+                    const pose = frame.getJointPose(indexTip, refSpace);
+                    if (pose) {
+                        const p = pose.transform.position;
+                        const handKey = inputSource.handedness || 'unknown';
+                        window.latestHandPos[handKey] = window.latestHandPos[handKey] || {};
+                        window.latestHandPos[handKey].indexTip = { x: p.x, y: p.y, z: p.z, t: time };
+                        // update XR label if present
+                        if (window.xrHandLabel) {
+                            try { window.xrHandLabel.info(`index: ${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)}`); } catch (e) {}
+                        }
+                        // Use pose.transform.position for 3D coordinates
+                        console.log('Index finger position:', pose.transform.position, 'handedness:', handKey);
+                    }
+                }
+            }
+        }
 
     global.scene().endFrame();
 }

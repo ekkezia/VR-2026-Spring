@@ -13,6 +13,8 @@ export default () => {
       scenes: [ 
          { name: "shapes" , path: "./shapes.js" , public: true },
          { name: "joints" , path: "./joints.js" , public: true },
+         { name: "test" , path: "./test.js" , public: true },
+         { name: "gltf" , path: "./gltf.js" , public: true },
       ]
    };
 }
