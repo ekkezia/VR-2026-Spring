@@ -5,6 +5,7 @@ import * as global from "../global.js";
 export const init = async model => {
 
    // Create nodes with no shapes as joints for animation.
+   let clickVar = 1;
 
    let s = model.add();
    const children = [];
@@ -48,12 +49,18 @@ export const init = async model => {
       }
    }
 
-   // gltf`
-   try {
-      // const gltfNode = global.scene().addNode(new Gltf2Node({ url: "../media/gltf/cube-room/cube-room.gltf" }));      console.log('added glTF node', gltfNode);
-   } catch (e) {
-      console.warn('could not add glTF node', e);
-   }
+   // INTERACTION
+   let m = 10;
+   inputEvents.onMove = hand => {
+      if (hand == 'left'){ 
+         m = inputEvents.pos(hand)[0] * .5 + .5;
+         console.log('left hand x pos:', m);
+      }
+      else {
+         // m = inputEvents.pos(hand)[1] * .5 + .5;
+         // console.log('right hand x pos:', m);
+      }
+   };
 
    // TODO 
    // 3D label for index-tip coordinates (create DOM fallback and poll for clay.vrWidgets)
@@ -85,7 +92,6 @@ export const init = async model => {
 
    // Animate the joints over time.
    model.move(0,1.5,0).scale(.4).animate(() => {
-      console.log('hand pos:', window.latestHandPos);
       // TODO
       // update 3D label from latest hand pos
       const h = (window.latestHandPos && (window.latestHandPos.indexTip || window.latestHandPos.index)) || null;
@@ -96,9 +102,9 @@ export const init = async model => {
 
       s
          .identity()
-         .move(0,1,0)
-         .turnY(Math.cos(1*model.time))
-         .turnZ(Math.cos(1*model.time) / 4); //90deg
+         .move(0,clickVar,0)
+         // .turnY(Math.cos(1*model.time) * clickVar)
+         // .turnZ(Math.cos(1*model.time) / 4); //90deg
 
       for (let i = 0; i < children.length; i++) {
          const angle = (i / children.length) * Math.PI; // calculate each child's angle along 180deg 
@@ -108,7 +114,7 @@ export const init = async model => {
          const y = i * spacing - ((count - 1) * spacing) / 2;
          children[i].parent
             .identity()
-            .move(x, y, 0)
+            .move(m, y, 0)
             // .turnZ(Math.sin(1 * model.time));
          children[i].child
             .identity()
@@ -122,6 +128,5 @@ export const init = async model => {
             .identity()
             // .turnY(Math.sin(1 * model.time) * 2);   
       } 
-
    });
 }
