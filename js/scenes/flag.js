@@ -19,7 +19,7 @@ export const init = async model => {
 
    // INSTANTIATE THE NEW TERRAIN OBJECT.
 
-   let terrain = model.add('myTerrain').txtr(1);
+   let terrain = model.add('sphere').txtr(1);
 
    // MOVE THE OBJECT INTO PLACE.
 
@@ -30,10 +30,24 @@ export const init = async model => {
       // SIMULATE THE APPEARANCE OF A BILLOWING FLAG.
 
       terrain.setVertices((u,v) => {
-         return [ 3*u,
-                  2*v-1,
-                  .4 * u * cg.noise(3*u-model.time,3*v,model.time)
-                ];
+                  // Convert uv -> xyz, then deform in xyz space
+                  const theta = 2 * Math.PI * u;
+                  const phi = Math.PI * (v - 0.5);
+                  const base = [
+                     Math.cos(phi) * Math.cos(theta),
+                     Math.sin(phi),
+                     Math.cos(phi) * Math.sin(theta)
+                  ];
+                  const t = model.time
+                  const ripple = 0.02 * Math.sin(6 * (base[0] + base[1] + base[2]) + t * 3);
+                  const noise = 0.05 * cg.noise(3 * base[0] + t, 3 * base[1], 3 * base[2]);
+         
+                  return [base[0], base[1], base[2]];
+         
+         // return [ 3*u,
+         //          2*v-1,
+         //          .4 * u * cg.noise(3*u-model.time,3*v,model.time)
+         //        ];
       });
    });
 }

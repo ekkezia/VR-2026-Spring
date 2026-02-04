@@ -1150,7 +1150,7 @@ function onXRFrame(t, frame) {
                             try { window.xrHandLabel.info(`index: ${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)}`); } catch (e) {}
                         }
                         // Use pose.transform.position for 3D coordinates
-                        console.log('Index finger position:', pose.transform.position, 'handedness:', handKey);
+                        // console.log('Index finger position:', pose.transform.position, 'handedness:', handKey);
                     }
                 }
             }

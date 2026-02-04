@@ -5,6 +5,7 @@ import * as global from "../global.js";
 export const init = async model => {
 
    // Create nodes with no shapes as joints for animation.
+   let clickVar = 1;
 
    let s = model.add();
    const children = [];
@@ -19,9 +20,11 @@ export const init = async model => {
    let numOfSubChild = 2;
    for (let i = 0; i < count; i++) {
       const parent = s.add();
-      parent.add('sphere').scale(sphereRadius).color(r, g, ((b - 0.1 * i) % 1));
+      parent.add('sphere').scale(sphereRadius)
+      // .color(r, g, ((b - 0.1 * i) % 1));
       const childChild = parent.add();
-      childChild.add('tubeX').move(0.6,0,0).scale(.6, .05, .05).color(r, g, ((b + 0.1 * i) % 1));
+      childChild.add('tubeX').move(0.6,0,0).scale(.6, .05, .05)
+      // .color(r, g, ((b + 0.1 * i) % 1));
       children.push({ parent: parent, child: childChild });
       // recursiveAdd(parent, numOfSubChild, `rgb(${r}, ${g}, ${Math.floor(((b + 0.2) % 1)*255)})`, children);
       
@@ -32,9 +35,11 @@ export const init = async model => {
       }
 
       const parent2 = s.add();
-      parent2.add('sphere').scale(sphereRadius).color(r, g, ((b + 0.1 * i) % 1));
+      parent2.add('sphere').scale(sphereRadius)
+      // .color(r, g, ((b + 0.1 * i) % 1));
       const childChild2 = parent2.add();
-      childChild2.add('tubeX').move(-0.6,0,0).scale(.6, .05, .05).color(r, g, ((b - 0.1 * i) % 1));
+      childChild2.add('tubeX').move(-0.6,0,0).scale(.6, .05, .05)
+      // .color(r, g, ((b - 0.1 * i) % 1));
       children2.push({ parent: parent2, child: childChild2 });
    }
 
@@ -48,12 +53,19 @@ export const init = async model => {
       }
    }
 
-   // gltf`
-   try {
-      // const gltfNode = global.scene().addNode(new Gltf2Node({ url: "../media/gltf/cube-room/cube-room.gltf" }));      console.log('added glTF node', gltfNode);
-   } catch (e) {
-      console.warn('could not add glTF node', e);
-   }
+   // INTERACTION
+   let m = 0;
+   let color;
+   inputEvents.onClick = hand => {
+      if (isXR()) {
+         // if (hand == 'left')
+         //    color[0] = inputEvents.pos(hand)[0] * .5 + .5;//-1 to 1 -> 0 to 1
+            
+         if (hand == 'right')
+            color[0] = inputEvents.pos(hand)[0] * .5 + .5;// x pos -1 to 1 -> 0 to 1
+            console.log('color', color, inputEvents.pos(hand))
+      }
+   };
 
    // TODO 
    // 3D label for index-tip coordinates (create DOM fallback and poll for clay.vrWidgets)
@@ -85,7 +97,6 @@ export const init = async model => {
 
    // Animate the joints over time.
    model.move(0,1.5,0).scale(.4).animate(() => {
-      console.log('hand pos:', window.latestHandPos);
       // TODO
       // update 3D label from latest hand pos
       const h = (window.latestHandPos && (window.latestHandPos.indexTip || window.latestHandPos.index)) || null;
@@ -96,10 +107,13 @@ export const init = async model => {
 
       s
          .identity()
-         .move(0,1,0)
-         .turnY(Math.cos(1*model.time))
-         .turnZ(Math.cos(1*model.time) / 4); //90deg
+         .move(0,clickVar,0)
+         // .turnY(Math.cos(1*model.time) * clickVar)
+         // .turnZ(Math.cos(1*model.time) / 4); //90deg
 
+      if (!color) {
+         color = [Math.abs(Math.sin(model.time/2)), Math.abs(Math.sin(model.time/3)), Math.abs(Math.sin(model.time/4))];
+      }
       for (let i = 0; i < children.length; i++) {
          const angle = (i / children.length) * Math.PI; // calculate each child's angle along 180deg 
          const radius = 1;
@@ -108,20 +122,23 @@ export const init = async model => {
          const y = i * spacing - ((count - 1) * spacing) / 2;
          children[i].parent
             .identity()
-            .move(x, y, 0)
+            .move(x + m, y, 0)
+            .color(color)
             // .turnZ(Math.sin(1 * model.time));
          children[i].child
             .identity()
+            .color(color)
             // .turnY(Math.sin(1 * model.time) * 2);         
 
          children2[i].parent
             .identity()
             .move(-x, y, 0)
+            .color(color)
             // .turnZ(Math.sin(1 * model.time));
          children2[i].child
             .identity()
+            .color(color)
             // .turnY(Math.sin(1 * model.time) * 2);   
       } 
-
    });
 }
