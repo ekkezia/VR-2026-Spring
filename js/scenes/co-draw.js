@@ -51,6 +51,9 @@ export const init = async model => {
       objColor: [.5, .5, 0]
    };
 
+   // remember last spawned pixel position (x,y) to avoid duplicates
+   let lastPixel = null;
+
    let invModel = () => cg.mInverse(model.getGlobalMatrix()); // the inverse of global matrix = local matrix
 
    inputEvents.onMove = hand => {
@@ -85,10 +88,17 @@ export const init = async model => {
                   // invert paper-local Y to correct orientation and clamp to paper extents
                   let rawX = paperLocal[0];
                   let rawY = paperLocal[1];
-                  let px = Math.max(-0.5, Math.min(0.5, rawX));
-                  let py = Math.max(-0.5, Math.min(0.5, rawY));
+                  let p = [];
+                  p[0]= Math.max(-0.5, Math.min(0.5, rawX));
+                  p[1] = Math.max(-0.5, Math.min(0.5, rawY));
+                  p[2] = 1;
+
+                  // avoid drawing duplicate pixels: compare by-value (x,y) against lastPixel
+                  if (lastPixel && lastPixel[0] === p[0] && lastPixel[1] === p[1] && lastPixel[2] === p[2]) return;
+                  
                   // place pixel slightly above the paper surface so it's visible
-                  let pixel = new Pixel(px, py, 1, currPencilColor, paper);
+                  let pixel = new Pixel(p[0], p[1], p[2], currPencilColor, paper);
+                  lastPixel = p;
                   pixel.draw();
                   shared.pixels.push(pixel); // add pixel to shared state so it gets broadcast to other clients;
                   server.broadcastGlobal('shared');
@@ -125,7 +135,7 @@ export const init = async model => {
    }
 
    model.move(-0.5, 2, 0).animate(() => {   
-        paper.identity().move(0, 0, 0).scale(1,1,.05);   
+        paper.identity().move(0, 0, -.5).scale(1,1,.05);   
       
         pencil.identity().move(status.right.position[0], status.right.position[1], status.right.position[2]).scale(1);      
         pencilLead.identity().move(0,0,0).color(status.right.color[0], status.right.color[1], status.right.color[2]).scale(.05, .05,pencilLength);
@@ -133,7 +143,8 @@ export const init = async model => {
 
         shared = server.synchronize('shared'); // BEGIN ANIMATE BY SYNCHRONIZING STATE.
         if (shared.pixels <= 0) return; // no pixels to draw yet
-        for (pix of shared.pixels) {
+        for (let pix of shared.pixels) {
+            console.log(shared.pixels.length, shared.pixels[0])
             pix.draw(); // redraw all pixels every frame (for now we dont store the drawn pixels in state, just the data needed to draw them, so we need to redraw every frame)
         }
     });

@@ -342,6 +342,8 @@ export let noise = (x,y,z) => {
 
 // GEOMETRY METHODS
 
+
+
 export let isPointNearLine = (P, A, B, near) => {
    let N = normalize(subtract(B,A));
    let t = dot(P,N) - dot(A,N);

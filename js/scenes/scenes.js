@@ -17,8 +17,10 @@ export default () => {
          { name: "bouncing"     , path: "./bouncing.js"     , public: true },
          { name: "multiplayer1" , path: "./multiplayer1.js" , public: true },
          { name: "aditya"   , path: "./aditya.js"   , public: true },
+         { name: "dna"   , path: "./dna.js"   , public: true },
          { name: "dough"   , path: "./dough.js"   , public: true },
          { name: "co-draw"   , path: "./co-draw.js"   , public: true },
+         { name: "co-mold"   , path: "./co-mold.js"   , public: true },
       ]
    };
 }
