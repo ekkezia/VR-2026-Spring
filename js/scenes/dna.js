@@ -1,6 +1,6 @@
 // Create and animate hierarchical joints.
-import { Gltf2Node } from "../render/nodes/gltf2.js";
-import * as global from "../global.js";
+// HW Week 1
+// TODO: do it recursively and fix the connection between DNA strands
 
 export const init = async model => {
 

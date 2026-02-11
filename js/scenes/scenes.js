@@ -18,7 +18,13 @@ export default () => {
          { name: "text1"        , path: "./text1.js"        , public: true },
          { name: "text2"        , path: "./text2.js"        , public: true },
          { name: "text3"        , path: "./text3.js"        , public: true },
+         { name: "text-ascii"        , path: "./text-ascii.js"        , public: true },
+         { name: "co-draw"        , path: "./co-draw.js"        , public: true },
+         { name: "co-mold"        , path: "./co-mold.js"        , public: true },
+         { name: "input-test"        , path: "./inputTest.js"        , public: true },
+         { name: "dna"        , path: "./dna.js"        , public: true },
       ]
    };
 }
+
 

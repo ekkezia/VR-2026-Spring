@@ -1,9 +1,5 @@
-/*
-   This scene is an example of how to use procedural texture
-   to animate the shape of an object. In this case the object
-   is a waving flag. The noise function is used to animate
-   the position of each vertex of the flag geometry.
-*/
+// HW Week 3
+// TODO: still can't modify the u & v depending on the position where the pencil touches
 
 import * as cg from "../render/core/cg.js";
 

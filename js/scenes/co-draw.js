@@ -1,9 +1,5 @@
-/*
-   This scene is an example of how to use procedural texture
-   to animate the shape of an object. In this case the object
-   is a waving flag. The noise function is used to animate
-   the position of each vertex of the flag geometry.
-*/
+// HW Week 3
+// TODO: bad lag on headset, and position didn't update correctly until pencil touch the pixel cube that was rendered
 
 import * as cg from "../render/core/cg.js";
 
@@ -32,7 +28,7 @@ export const init = async model => {
       }
       draw() {
          // permanent pixel (added as child of `paper`)
-         this.parent.add('cube').identity().move(this.x, this.y, this.z).color(this.color[0], this.color[1], this.color[2]).scale(.01, .01, .1);
+         this.parent.add('diskX').identity().move(this.x, this.y, this.z).color(this.color[0], this.color[1], this.color[2]).scale(.01, .01, .1);
       }
    }
     let paper = model.add('cube').move(0, 0, -1).color(1,1,1).scale(1,1,0.02);

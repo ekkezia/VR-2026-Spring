@@ -198,6 +198,46 @@ export function Clay(gl, canvas) {
 	       }
 	    }
             break;
+            
+            case 'text2':
+	    {
+               let id = item.id;
+               let at = item.at ?? [0,0,0];
+               let orient = item.orient;
+               let text = item.text ?? '';
+               let ry = (item.height ?? .01) / 2;
+               let rgb = item.rgb ?? default_rgb;
+               let w = ry * 7 / 6;
+
+               let d = (text.length - 1) / 2;
+	       for (let n = 0 ; n < text.length ; n++) {
+                  let ch = item.text.charCodeAt(n) - 32;
+                  let col = ch % 12;
+                  let row = ch / 12 >> 0;
+	          let uv = (du,dv) => [ (col + du) / 12, (row + dv) / 8 ];
+
+		  let AB = (n - d - .5) * w;
+		  let CD = (n - d + .5) * w;
+
+	          let A = { uv: uv(0,1), nor: [0,0,1] };
+	          let B = { uv: uv(0,0), nor: [0,0,1] };
+	          let C = { uv: uv(1,0), nor: [0,0,1] };
+	          let D = { uv: uv(1,1), nor: [0,0,1] };
+
+                  A.rgb = B.rgb = C.rgb = D.rgb = rgb;
+
+                  let i = meshData.length, up = [0,ry,0], dn = [0,-ry,0];
+		  textData.push( { i: i  , r: CD, P: cg.add(at, up), id: id, n: n, m: 1, orient: orient },
+		                 { i: i+1, r: AB, P: cg.add(at, up), id: id, n: n, m: 0, orient: orient },
+		                 { i: i+2, r: AB, P: cg.add(at, dn), id: id, n: n, m: 2, orient: orient },
+		                 { i: i+3, r: AB, P: cg.add(at, dn), id: id, n: n, m: 2, orient: orient },
+		                 { i: i+4, r: CD, P: cg.add(at, dn), id: id, n: n, m: 3, orient: orient },
+		                 { i: i+5, r: CD, P: cg.add(at, up), id: id, n: n, m: 1, orient: orient } );
+
+                  meshData.push(C, B, A, A, D, C);
+	       }
+	    }
+            break;
 
          case 'rod':
             {
@@ -334,6 +374,53 @@ export function Clay(gl, canvas) {
    }
 
    this.text = (text, isFont2) => {
+      const inch = 0.0254;
+
+      let charQuad = (col, row, ch) => {
+         let i, j, x0, y0, x1, y1, u0, v0, u1, v1;
+
+         x0 =  col * inch/2; x1 = x0 + inch/2;
+         y0 = -row * inch  ; y1 = y0 - inch  ;
+
+	 if (isFont2) {
+            i = ch % 11; j = ch / 11 >> 0;
+            u0 = .005 + (i+1.0/3.5) / 11.1; v0 = (j+.2) / 9;
+            u1 = .005 + (i+2.5/3.5) / 11.1; v1 = (j+.8) / 9;
+	 }
+	 else {
+            i = ch % 10; j = ch / 10 >> 0;
+            u0 = (i+1/4) / 10; v0 =  j    / 10;
+            u1 = (i+3/4) / 10; v1 = (j+1) / 10;
+         }
+
+	 let add = (a,b) =>
+	    V.push(clay.vertexArray([a ? x1 : x0, b ? y1 : y0,0],
+				    [0,0,1], [1,0,0],
+				    [a ? u1 : u0, b ? v1 : v0]));
+         add(0,1); add(1,1); add(0,0);
+         add(0,0); add(1,1); add(1,0);
+      }
+
+      let V = [], col = 0, row = 0;
+      for (let n = 0 ; n < text.length ; n++) {
+         let charCode = text.charCodeAt(n);
+         switch (charCode) {
+         case  9: col += 8 - col % 8; break;       // tab
+         case 10: row++; col = 0; break;           // newline
+	 case 32: col++; break;                    // space
+         default: charQuad(col++, row, charCode - 32); break;
+         }
+      }
+
+      let mesh = new Float32Array(V.flat());
+      mesh.isTriangles = true;
+      mesh.isFont2 = isFont2;
+      let typeName = 'udfText' + (1000 * Math.random() >> 0);
+      this.defineMesh(typeName, mesh);
+      return typeName;
+   }
+
+   this.text2 = (text, isFont2) => {
       const inch = 0.0254;
 
       let charQuad = (col, row, ch) => {

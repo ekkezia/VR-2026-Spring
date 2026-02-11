@@ -1,5 +1,8 @@
 import * as cg from '../../js/render/core/cg.js';
 
+// HW Week 2
+// NOTE: Pinching with 3 fingers will cause the hand to travel forward / backward depending on distance when pinching (this is built-in by Ken)
+
 export const init = async model => {
    let obj1 = model.add('cube');
    let handL = model.add('sphere').scale(0.01).color(0,1,0);
