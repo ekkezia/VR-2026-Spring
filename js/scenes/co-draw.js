@@ -28,7 +28,7 @@ export const init = async model => {
       }
       draw() {
          // permanent pixel (added as child of `paper`)
-         this.parent.add('diskX').identity().move(this.x, this.y, this.z).color(this.color[0], this.color[1], this.color[2]).scale(.01, .01, .1);
+         this.parent.add('diskZ').identity().move(this.x, this.y, this.z).color(this.color[0], this.color[1], this.color[2]).scale(.01, .01, .1);
       }
    }
     let paper = model.add('cube').move(0, 0, -1).color(1,1,1).scale(1,1,0.02);
