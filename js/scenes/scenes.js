@@ -23,6 +23,7 @@ export default () => {
          { name: "co-mold"        , path: "./co-mold.js"        , public: true },
          { name: "input-test"        , path: "./inputTest.js"        , public: true },
          { name: "dna"        , path: "./dna.js"        , public: true },
+         { name: "text6"        , path: "./text6.js"        , public: true },
       ]
    };
 }
