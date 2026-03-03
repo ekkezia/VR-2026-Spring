@@ -4,9 +4,9 @@
  * Used across different mrchat implementations
  */
 
+const ENDPOINT = "http://10.17.118.252:9005/transcribe";
 export const WHISPER_CONFIG = {
-   // ENDPOINT: "http://192.168.1.89:9000/transcribe",
-   ENDPOINT: "http://10.17.118.252/transcribe",
+   ENDPOINT: ENDPOINT,
    MIME_TYPES: [
       'audio/webm;codecs=opus',
       'audio/webm',
