@@ -328,7 +328,7 @@ function initWebSpeech() {
 }
 
 
-export function initXR() {
+export async function initXR() {
     xrButton = new WebXRButton({
         onRequestSession: onRequestSession,
         onEndSession: onEndSession,
@@ -336,14 +336,18 @@ export function initXR() {
     global.setXREntry(xrButton);
     let pending = null;
     if (navigator.xr) {
-        pending = navigator.xr.isSessionSupported("immersive-ar").then((supported) => {
+        pending = navigator.xr.isSessionSupported("immersive-ar").then(async (supported) => {
             console.log("immersive-vr supported:[" + supported + "]");
             xrButton.enabled = supported;
             window.vr = supported;
             window.avatars[window.playerid].vr = window.vr;
             handTrackerInit();
             global.setIsImmersive(supported);
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log("Mic ready BEFORE XR");
+
             initWebSpeech();
+            
             navigator.xr.requestSession("inline").then(onSessionStarted);
         }).catch((err) => {
             navigator.xr.requestSession("inline").then(onSessionStarted);
@@ -539,7 +543,47 @@ function initGL() {
 let isXRMode = false;
 window.isXR = () => isXRMode;
 
-function onRequestSession() {
+// Global persistent mic stream for use in VR
+window.persistentMicStream = null;
+
+// Test function to manually check microphone access
+window.testMicAccess = async function() {
+    console.log("🧪 Testing microphone access...");
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log("📱 Available devices:", devices);
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Microphone test SUCCESSFUL!");
+        console.log("✅ Stream:", stream);
+        console.log("✅ Tracks:", stream.getTracks());
+        
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+        return "SUCCESS";
+    } catch (error) {
+        console.error("❌ Microphone test FAILED:", error);
+        console.error("❌ Error name:", error.name);
+        console.error("❌ Error message:", error.message);
+        return "FAILED: " + error.message;
+    }
+};
+
+async function onRequestSession() {
+    // Acquire microphone BEFORE entering VR
+    console.log("🎤 Acquiring microphone before VR session...");
+    console.log("🎤 Available devices:", await navigator.mediaDevices.enumerateDevices());
+    try {
+        window.persistentMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Microphone acquired successfully");
+        console.log("✅ Stream tracks:", window.persistentMicStream.getTracks());
+    } catch (error) {
+        console.error("❌ Failed to acquire microphone:", error);
+        console.error("❌ Error name:", error.name);
+        console.error("❌ Error message:", error.message);
+        alert("⚠️ Microphone access denied or unavailable!\n\nError: " + error.message + "\n\nVoice features will not work.");
+    }
+    
     return navigator.xr
         .requestSession("immersive-ar", {
             requiredFeatures: ["local-floor", "hand-tracking"],
