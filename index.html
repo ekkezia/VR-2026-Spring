@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 </head>
 
 <body>
+
   <div id=videoElement></div>
   <canvas id=anidrawCanvas width=1024 height=960  style="position:absolute;left:-2000px;"></canvas>
   <canvas id=webcamCanvas width=640 height=480  style="position:absolute;left:-2000px;"></canvas>
@@ -75,7 +76,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <audio id="local_webrtc" autoplay></audio>
   </div>
 
+  <!-- Karaoke demo -->
+  <section style="margin:2em 0;text-align:center">
+    <h2>Karaoke Demo: Cosmic Girl</h2>
+    <audio id="karaoke-audio" controls style="width:60%">
+      <source src="media/sound/music/cosmicgirl.mp3" type="audio/mpeg">
+      Your browser does not support the audio element.
+    </audio>
+    <div id="karaoke-lyrics" style="font-size:2em;margin-top:1em;color:#e91e63;background:#fff;padding:0.5em;border-radius:8px;box-shadow:0 2px 8px #0002;min-height:2em;text-shadow:1px 1px 2px #0006;"></div>
+  </section>
+
   <script type="module" src="/js/main.js"></script>
+  <!-- <script type="module">
+    import { loadLyricsAndSync } from './js/lyricsSync.js';
+    loadLyricsAndSync('#karaoke-audio', 'media/sound/json/cosmicgirl.json', '#karaoke-lyrics');
+    // Show first lyric immediately
+    fetch('media/sound/json/cosmicgirl.json')
+      .then(r => r.json())
+      .then(lyrics => {
+        if (lyrics && lyrics.length > 0) {
+          document.getElementById('karaoke-lyrics').textContent = lyrics[0].text;
+        }
+      }); -->
+  </script>
 
 </body>
 

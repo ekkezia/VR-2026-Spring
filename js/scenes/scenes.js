@@ -36,6 +36,8 @@ export default () => {
          { name: "parse2"       , path: "./parse2.js"       , public: true },
          { name: "detective"        , path: "./detective.js"        , public: true },
          { name: "mrchat"        , path: "./mrchat.js"        , public: true },
+         { name: "cameraGaze"        , path: "./cameraGaze.js"        , public: true },
+         { name: "karaoke"        , path: "./karaoke.js"        , public: true },
       ]
    };
 }
