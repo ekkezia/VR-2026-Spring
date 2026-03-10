@@ -120,7 +120,7 @@ export function ControllerBeam(model, hand) {
       let bm = this.beamMatrix();
       let V = bm.slice(12,15);
       let W = bm.slice(8,11);
-      return cg.add(V, cg.scale(W, -uvd[2]));
+      return cg.mTransform(cg.mInverse(worldCoords), cg.add(V, cg.scale(W, -uvd[2])));
    }
    this.projectOntoBeam = P => {
       let bm = this.beamMatrix();	// get controller beam matrix

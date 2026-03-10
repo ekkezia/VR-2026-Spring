@@ -14,6 +14,10 @@ function ArticleNode (model, articleName) {
    let isMovingArticle = false, isRightDraggingInTitleBar = false;
    let handPos = {}, beamPos = {}, isPressed = {}, wasPressed = {};
 
+   // THE COORDINATE SYSTEM OF THE USER'S EYES
+
+   let eyeMatrix = () => cg.mMultiply(cg.mInverse(clay.root().viewMatrix(0)), worldCoords);
+
    // POSITION OF USER POINTER RELATIVE TO A FOCUS BAR
 
    let relToBar = (hand, n) => {
@@ -87,6 +91,8 @@ function ArticleNode (model, articleName) {
       }
    }
 
+   // SET THE ARTICLE TO OPEN OR CLOSED
+
    this.setOpen = state => isOpen = state;
 
    ///////////////////// PRESS / DRAG / RELEASE EVENT HANDLING ///////////////////
@@ -120,7 +126,7 @@ function ArticleNode (model, articleName) {
          articleNode.setOpen(false);
 	 let p = inputEvents.pos('left');
 	 if (! window.handtracking) {
-            let z = cg.mMultiply(cg.mInverse(clay.root().viewMatrix(0)), worldCoords).slice(8,11);
+            let z = eyeMatrix().slice(8,11);
 	    p = cg.add(p, cg.scale(z, -.4));
          }
          articleNode.setPosition(p);
@@ -425,7 +431,7 @@ function ArticleNode (model, articleName) {
 
             // VARY TEXT SIZE BASED ON DISTANCE FROM THE USER'S EYE TO THE PLANE OF THE TEXT BLOCK
 
-            let eye = cg.mMultiply(cg.mInverse(clay.root().viewMatrix(0)), worldCoords).slice(12,15);
+            let eye = eyeMatrix().slice(12,15);
             let m = textBlock.getGlobalMatrix();
             let z = cg.normalize(m.slice(8,11));
             let newTextSize = Math.max(.27, Math.min(1, cg.dot(z, eye)));
