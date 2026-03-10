@@ -35,9 +35,9 @@ export const init = async model => {
       if (uvdR) {
          rect.color(1,.5,.5);
          let u = uvdR[0], v = uvdR[1];
-         model.add('diskZ').move(.2*u,0.5+.1*v,20.5,.001).scale(.01).color(0,0,0).dull();
+         model.add('diskZ').move(.2*u,0.5+.1*v,.001).scale(.01).color(0,0,0).dull();
 	 if (model.time % .04 < .02)
-	    vibrate('right', 1, 2);
+	    vibrate('right', 1, 20);
       }
    });
 }
