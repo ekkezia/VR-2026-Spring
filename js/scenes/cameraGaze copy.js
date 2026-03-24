@@ -1,37 +1,48 @@
 import * as cg from "../render/core/cg.js";
 
-// Highlight the object that is nearest to the head gaze direction.
+const GAZE_RADIUS = 2;
+
+const BACKDROP_SIZE = 4;   // matches viewfinder square scale(4,4,...)
+const CELL_SIZE = 1/3;     // size of each small square
+const CENTER_Y = 1.5;      // matches viewfinder move(0, 1.5, ...)
+
+const halfSteps = Math.round((BACKDROP_SIZE / CELL_SIZE) / 2); // = 6
 
 export const init = async model => {
-   let viewfinder = model.add().opacity(.7);
-   viewfinder.add('square').move(0,-60,-20).scale(100,50,1); // top
-   viewfinder.add('square').move(0,60,-20).scale(100,50,1);  // bottom
-   viewfinder.add('square').move(-60,60,-20).scale(50,100,1); // left
-   viewfinder.add('square').move(60,60,-20).scale(50,100,1);  // right
+   let photo = model.add();
+   model.txtrSrc(1, '../media/textures/360photo.jpg');
+   photo.add('square').move(0, CENTER_Y, -0.6).scale(BACKDROP_SIZE, BACKDROP_SIZE, 0.01).color(1,1,1).txtr(1);
    
-   for (let u = -3 ; u <= 3 ; u++)
-   for (let v = -3 ; v <= 3 ; v++)
-   for (let w = -3 ; w <= 3 ; w++)
-      if (u*u > 4 || v*v > 4 || w*w > 4)
-         model.add().move(u/3,v/3+1.5,w/3+.5).scale(.1).add('sphere');
+   for (let u = -halfSteps ; u <= halfSteps ; u++)
+   for (let v = -halfSteps ; v <= halfSteps ; v++)
+      model.add()
+         .move(u * CELL_SIZE * 1.5, v * CELL_SIZE * 1.5 + CENTER_Y, -0.5)
+         .scale(CELL_SIZE / 2 * 1.5, CELL_SIZE / 2 * 1.5, 0.01)
+         .add('square');
 
    model.animate(() => {
       let nMin = -1, dMin = 1000;
       let mm = cg.mMultiply(clay.root().viewMatrix(0), worldCoords);
+
+      let distances = [];
       for (let n = 1 ; n < model.nChildren() ; n++) {
          let m = cg.mMultiply(mm, model.child(n).getMatrix());
          let d = m[12]*m[12] + m[13]*m[13];
-
-         viewfinder.move(m[12], m[13], -20);
+         distances.push({ n, d, inFront: m[14] < 0 });
          
-	 if (m[14] < 0 && d < dMin) {
-	    dMin = d;
-	    nMin = n;
-	 }
+         if (m[14] < 0 && d < dMin) {
+            dMin = d;
+            nMin = n;
+         }
       }
-      for (let n = 1 ; n < model.nChildren() ; n++)
-         model.child(n).child(0).color(n == nMin ? [1,0,0] : [1,1,1])
-	                        .identity().scale(n == nMin ? 1 : .7);
+
+      for (let { n, d, inFront } of distances) {
+         const normalizedD = Math.min(d / 2, 1);
+         const opacity = (!inFront || d > GAZE_RADIUS) ? 1 : 0.85 * normalizedD;
+         model.child(n).child(0)
+            .color([0, 0, 0])
+            .opacity(opacity)
+            .identity().scale(1);
+      }
    });
 }
-

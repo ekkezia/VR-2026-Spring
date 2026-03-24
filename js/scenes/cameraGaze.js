@@ -10,7 +10,7 @@ const halfSteps = Math.round((BACKDROP_SIZE / CELL_SIZE) / 2); // = 6
 
 export const init = async model => {
    let photo = model.add();
-   model.txtrSrc(1, '../media/textures/brick.png');
+   model.txtrSrc(1, '../media/textures/360photo.jpg');
    photo.add('square').move(0, CENTER_Y, -0.6).scale(BACKDROP_SIZE, BACKDROP_SIZE, 0.01).color(1,1,1).txtr(1);
    
    for (let u = -halfSteps ; u <= halfSteps ; u++)

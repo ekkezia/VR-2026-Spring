@@ -12,8 +12,9 @@ export const init = async model => {
 
    model.animate(() => {
       rect.color(.25,.35,.5);
-      while (model.nChildren() > 1)
+      while (model.nChildren() > 1) {
          model.remove(1);
+      }
 
       // LEFT CONTROLLER BEAM SHOWS TEXT OF U,V,D AND MAKES A STEADY VIBRATION
 

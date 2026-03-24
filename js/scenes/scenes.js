@@ -39,6 +39,8 @@ export default () => {
          { name: "mrchat"        , path: "./mrchat.js"        , public: true },
          { name: "cameraGaze"        , path: "./cameraGaze.js"        , public: true },
          { name: "karaoke"        , path: "./karaoke.js"        , public: true },
+         { name: "karaoke2"        , path: "./karaoke2.js"        , public: true },
+         { name: "beat2"        , path: "./beam2.js"        , public: true },
          { name: "parse3"       , path: "./parse3.js"       , public: true },
       ]
    };
