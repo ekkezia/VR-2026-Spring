@@ -5,8 +5,8 @@ const CENTER_Y = 1.5;
 
 // Overlay sphere sits just inside the 360 photo sphere
 const OVERLAY_R = 2;
-const N_LON = 24;  // cells around the equator
-const N_LAT = 12;  // cells pole to pole
+const N_LON = 48;  // cells around the equator
+const N_LAT = 24;  // cells pole to pole
 
 export const init = async model => {
    let photo = model.add();
