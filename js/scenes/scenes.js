@@ -24,6 +24,7 @@ export default () => {
          { name: "input-test"        , path: "./inputTest.js"        , public: true },
          { name: "dna"        , path: "./dna.js"        , public: true },
          { name: "text6"        , path: "./text6.js"        , public: true },
+         { name: "text6WithAI"  , path: "./text6WithAI.js"  , public: true },
          { name: "text7"        , path: "./text7.js"        , public: true },
          { name: "text8"        , path: "./text8.js"        , public: true },
          { name: "dissolve"     , path: "./dissolve.js"     , public: true },
@@ -40,7 +41,11 @@ export default () => {
          { name: "cameraGaze"        , path: "./cameraGaze.js"        , public: true },
          { name: "beat"        , path: "./beam4.js"        , public: true },
          { name: "beat2"        , path: "./beam2.js"        , public: true },
+
+         { name: "aiHelper"     , path: "./aiQuery.js"    , public: true },
          { name: "parse3"       , path: "./parse3.js"       , public: true },
+         { name: "arrange"      , path: "./arrange.js"      , public: true },
+         { name: "arrange2"     , path: "./arrange2.js"     , public: true },
       ]
    };
 }
