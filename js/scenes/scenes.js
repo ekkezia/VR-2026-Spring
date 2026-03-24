@@ -19,7 +19,7 @@ export default () => {
          { name: "text2"        , path: "./text2.js"        , public: true },
          { name: "text3"        , path: "./text3.js"        , public: true },
          { name: "text-ascii"        , path: "./text-ascii.js"        , public: true },
-         { name: "co-draw"        , path: "./co-draw.js"        , public: true },
+         { name: "co-draw2"        , path: "./co-draw2.js"        , public: true },
          { name: "co-mold"        , path: "./co-mold.js"        , public: true },
          { name: "input-test"        , path: "./inputTest.js"        , public: true },
          { name: "dna"        , path: "./dna.js"        , public: true },
@@ -38,8 +38,7 @@ export default () => {
          { name: "detective"        , path: "./detective.js"        , public: true },
          { name: "mrchat"        , path: "./mrchat.js"        , public: true },
          { name: "cameraGaze"        , path: "./cameraGaze.js"        , public: true },
-         { name: "karaoke"        , path: "./karaoke.js"        , public: true },
-         { name: "karaoke2"        , path: "./karaoke2.js"        , public: true },
+         { name: "beat"        , path: "./beam4.js"        , public: true },
          { name: "beat2"        , path: "./beam2.js"        , public: true },
          { name: "parse3"       , path: "./parse3.js"       , public: true },
       ]

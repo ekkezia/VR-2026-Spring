@@ -1,27 +1,56 @@
 import * as cg from "../render/core/cg.js";
 
 const GAZE_RADIUS = 2;
+const CENTER_Y = 1.5;
 
-const BACKDROP_SIZE = 4;   // matches viewfinder square scale(4,4,...)
-const CELL_SIZE = 1/3;     // size of each small square
-const CENTER_Y = 1.5;      // matches viewfinder move(0, 1.5, ...)
-
-const halfSteps = Math.round((BACKDROP_SIZE / CELL_SIZE) / 2); // = 6
+// Overlay sphere sits just inside the 360 photo sphere
+const OVERLAY_R = 2;
+const N_LON = 24;  // cells around the equator
+const N_LAT = 12;  // cells pole to pole
 
 export const init = async model => {
    let photo = model.add();
    model.txtrSrc(1, '../media/textures/360photo.jpg');
-   photo.add('square').move(0, CENTER_Y, -0.6).scale(BACKDROP_SIZE, BACKDROP_SIZE, 0.01).color(1,1,1).txtr(1);
-   
-   for (let u = -halfSteps ; u <= halfSteps ; u++)
-   for (let v = -halfSteps ; v <= halfSteps ; v++)
-      model.add()
-         .move(u * CELL_SIZE * 1.5, v * CELL_SIZE * 1.5 + CENTER_Y, -0.5)
-         .scale(CELL_SIZE / 2 * 1.5, CELL_SIZE / 2 * 1.5, 0.01)
-         .add('square');
+   photo.add('sphere').scale(-50, 50, 50).color(1,1,1).txtr(1);
+
+   // Arc-length half-extents for gap-free tiling
+   const cellW = OVERLAY_R * (2 * Math.PI / N_LON) / 2;
+   const cellH = OVERLAY_R * (Math.PI  / N_LAT)   / 2;
+
+   for (let li = 0; li < N_LAT; li++) {
+      for (let loi = 0; loi < N_LON; loi++) {
+         const lat = ((li + 0.5) / N_LAT - 0.5) * Math.PI; // -π/2 … π/2
+         const lon = (loi + 0.5) / N_LON * 2 * Math.PI;    // 0 … 2π
+
+         const cosLat = Math.cos(lat), sinLat = Math.sin(lat);
+         const cosLon = Math.cos(lon), sinLon = Math.sin(lon);
+
+         // Position on overlay sphere (centre at world origin + CENTER_Y)
+         const px =  OVERLAY_R * cosLat * sinLon;
+         const py =  OVERLAY_R * sinLat + CENTER_Y;
+         const pz = -OVERLAY_R * cosLat * cosLon; // -z = forward
+
+         // Basis vectors for inward-facing orientation
+         // right = longitude tangent
+         const rx = cosLon,               ry = 0,      rz = sinLon;
+         // up    = latitude tangent
+         const ux = -sinLat * sinLon,     uy = cosLat, uz = sinLat * cosLon;
+         // fwd   = inward normal (toward sphere centre / viewer)
+         const fx = -cosLat * sinLon,     fy = -sinLat, fz = cosLat * cosLon;
+
+         // Column-major 4×4: right*cellW | up*cellH | fwd | position
+         const mat = [
+            rx*cellW, ry*cellW, rz*cellW, 0,
+            ux*cellH, uy*cellH, uz*cellH, 0,
+            fx,       fy,       fz,       0,
+            px,       py,       pz,       1
+         ];
+
+         model.add().setMatrix(mat).add('square');
+      }
+   }
 
    model.animate(() => {
-      let nMin = -1, dMin = 1000;
       let mm = cg.mMultiply(clay.root().viewMatrix(0), worldCoords);
 
       let distances = [];
@@ -29,11 +58,6 @@ export const init = async model => {
          let m = cg.mMultiply(mm, model.child(n).getMatrix());
          let d = m[12]*m[12] + m[13]*m[13];
          distances.push({ n, d, inFront: m[14] < 0 });
-         
-         if (m[14] < 0 && d < dMin) {
-            dMin = d;
-            nMin = n;
-         }
       }
 
       for (let { n, d, inFront } of distances) {

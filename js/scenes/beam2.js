@@ -22,6 +22,7 @@ const state = {
 	activeSongIdx: null,
 	currentBeatIdx: 0,
 	currentScore: 0,
+	commentTimer: -999,
 	beamDisplayPos: {
 		left: [0, 0, 0],
 		right: [0, 0, 0],
@@ -176,31 +177,26 @@ export const init = async (model) => {
 	};
 
 	const commentText = model.add();
-	commentText
-		.add(clay.text(COMMENT.PERFECT))
-		.move(0, 2.5, 0.01)
-		.scale(10)
-		.color(1, 1, 1);
 
 	const beamRPointer = model.add();
 	beamRPointer.add('diskZ').scale(0.01).color(0, 1, 0).dull();
 
-	// const beamLDisplay = model.add();
-	// beamLDisplay
-	// 	.add('tubeZ')
-	// 	.scale(0.1, 0.1, 1)
-	// 	.move(0, 0, 0)
-	// 	.color(1, 1, 0)
-	// 	.opacity(0.5)
-	// 	.dull();
-	// const beamRDisplay = model.add();
-	// beamRDisplay
-	// 	.add('tubeZ')
-	// 	.scale(0.1, 0.1, 1)
-	// 	.move(0, 0, 0)
-	// 	.color(1, 0, 1)
-	// 	.opacity(0.5)
-	// 	.dull();
+	const beamLDisplay = model.add();
+	beamLDisplay
+		.add('tubeZ')
+		.scale(0.1, 0.1, 1)
+		.move(0, 0, 0)
+		.color(1, 1, 0)
+		.opacity(0.5)
+		.dull();
+	const beamRDisplay = model.add();
+	beamRDisplay
+		.add('tubeZ')
+		.scale(0.1, 0.1, 1)
+		.move(0, 0, 0)
+		.color(1, 0, 1)
+		.opacity(0.5)
+		.dull();
 
 	inputEvents.onPress = (hand) => {
 		state.pressed = true;
@@ -215,18 +211,27 @@ export const init = async (model) => {
 		}, 100); // small delay to differentiate between quick tap and hold
 	};
 
-	const BEAT_SCALE = 0.2;
+	const BEAT_SCALE = 0.1;
 
 	const CUBE_START_Z = -10; // Far start
 
 	model.animate(() => {
-		// console.log('beam pos', beamL, beamL);
 		beamL.update();
 		beamR.update();
 
-		// beamLDisplay.setMatrix(beamL.m);
-		// beamRDisplay.setMatrix(beamR.m);
-		// console.log('Beam L pos:', beamL.position, 'Beam R pos:', beamR.position);
+		const bend = Math.PI / 4;
+		const lBeamMat = cg.mMultiply(beamL.m, cg.mRotateX(-bend));
+		const rBeamMat = cg.mMultiply(beamR.m, cg.mRotateX(-bend));
+		beamLDisplay.setMatrix(lBeamMat);
+		beamRDisplay.setMatrix(rBeamMat);
+
+		// Beam tip: local z=-1 transformed to world space via beam matrix
+		const lTip = [lBeamMat[12] - lBeamMat[8], lBeamMat[13] - lBeamMat[9], lBeamMat[14] - lBeamMat[10]];
+		const rTip = [rBeamMat[12] - rBeamMat[8], rBeamMat[13] - rBeamMat[9], rBeamMat[14] - rBeamMat[10]];
+
+		// Reset beam opacity each frame
+		beamLDisplay.child(0).opacity(0.5);
+		beamRDisplay.child(0).opacity(0.5);
 
 		// Animate cubes along z axis to match audio time if game started
 		const audioTime = state.audioElement[state.activeSongIdx]
@@ -314,12 +319,12 @@ export const init = async (model) => {
 
 			// Detect if beamRDisplay hits the menu using isPointInBox
 			// Get the tip position of the beamRDisplay (z+ direction)
-			// const isHit = cg.isPointInBox(beamLDisplay.position[0], beamLDisplay.position[1], beamLDisplay.position[2], menu.getGlobalMatrix());
+			const isHit = cg.isPointInBox(beamRDisplay.position[0], beamRDisplay.position[1], beamRDisplay.position[2], menu.getGlobalMatrix());
 
 			let hitMenu =
 				beamR.hitRect(menu.getGlobalMatrix()) ||
 				beamL.hitRect(menu.getGlobalMatrix());
-			if (hitMenu) {
+			if (isHit) {
 				menu.color(1, 1, 1);
 				if (state.released) {
 					state.started = true;
@@ -349,57 +354,22 @@ export const init = async (model) => {
 			  )
 			: [];
 		if (lyricNodes[state.activeSongIdx]) {
-			// console.log('Checking beamR collisions with lyrics, activeSongIdx:', state.activeSongIdx, 'lyricNodes length:', lyricNodes[state.activeSongIdx][0].node);
+			const PERFECT_WINDOW = 0.2; // seconds from beatTime for PERFECT
+			let freshHitType = null; // 'perfect' or 'great'
+			let freshHitPosition = null;
+			let newlyMissed = false;
+
 			for (let i = 0; i < relevantNodes.length; i++) {
-				// console.log('Checking lyric idx:', i, 'hit status:', lyricNodes[state.activeSongIdx][i].hit, lyricNodes[state.activeSongIdx][i].node);
-				let hit =
-					beamL.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					) ||
-					beamR.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					);
+				const nodeData = relevantNodes[i];
+				const matrix = nodeData.node.getGlobalMatrix();
+				let hit = beamL.hitRect(matrix) || beamR.hitRect(matrix);
 
-				let p1, p2, p3;
-				if (
-					beamL.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)
-				) {
-					p1 = beamL.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[0];
-					p2 = beamL.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[1];
-					p3 = beamL.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[2];
-					// beamLDisplay.identity().move(p1, p2, p3);
-				}
-				if (
-					beamR.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)
-				) {
-					p1 = beamR.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[0];
-					p2 = beamR.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[1];
-					p3 = beamR.hitRect(
-						lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix(),
-					)[2];
-
-					// beamRDisplay.identity().move(p1, p2, p3);
-				}
-				// 		v = uvdL[1],
-				// 		d = uvdL[2];
-				// console.log('global matrix', lyricNodes[state.activeSongIdx][i].node.getGlobalMatrix())
-				if (hit && !lyricNodes[state.activeSongIdx][i].hit) {
-					lyricNodes[state.activeSongIdx][i].hit = true;
-					currentScore += 100;
+				if (hit && !nodeData.hit) {
+					nodeData.hit = true;
+					const timingDiff = Math.abs(audioTime - nodeData.beatTime);
+					freshHitType = timingDiff <= PERFECT_WINDOW ? 'perfect' : 'great';
+					freshHitPosition = nodeData.position;
+					currentScore += freshHitType === 'perfect' ? 100 : 50;
 					console.log('Hit lyric idx:', i, currentScore);
 					// Play SFX from preloaded buffer
 					if (sfxBuffer && state.audioContext) {
@@ -418,29 +388,53 @@ export const init = async (model) => {
 						.move(-0.5, 0.2, 0.01)
 						.scale(8);
 
-					if (commentText.nChildren() > 0) {
-						commentText.remove(0);
-					}
-
-					commentText
-						.add(clay.text(COMMENT.PERFECT))
-						.move(-1, 0, 0.01)
-						.scale(3)
-						.color(0, 1, 0);
-
-						// console.log('perfect', 'lyric idx:', i);
 					if (model.time % 0.04 < 0.02) vibrate('right', 1, 20);
-				} else {
-					if (commentText.nChildren() > 0) {
-						commentText.remove(0);
-					}
-					// console.log('missed', 'lyric idx:', i);
-					commentText
-						.add(clay.text(COMMENT.MISSED))
-						.move(-1, 0, 0.01)
-						.scale(3)
-						.color(1, 0, 0);
 				}
+
+				// isPointInBox beam tip check — highlight beam on overlap
+				const nodeMatrix = nodeData.node.getGlobalMatrix();
+				if (cg.isPointInBox(lTip[0], lTip[1], lTip[2], nodeMatrix)) {
+					beamLDisplay.child(0).opacity(0.7);
+				}
+				if (cg.isPointInBox(rTip[0], rTip[1], rTip[2], nodeMatrix)) {
+					beamRDisplay.child(0).opacity(0.7);
+				}
+
+				// Mark as missed only when the beat window expires without being hit
+				if (!nodeData.hit && audioTime > nodeData.beatTime + 1 && !nodeData.missed) {
+					nodeData.missed = true;
+					newlyMissed = nodeData.position;
+				}
+			}
+
+			// Update comment text once per frame based on what happened
+			if (freshHitType === 'perfect') {
+				if (commentText.nChildren() > 0) commentText.remove(0);
+				commentText
+					.add(clay.text(COMMENT.PERFECT))
+					.move(freshHitPosition[0], freshHitPosition[1] + 0.1, LYRIC_Z)
+					.scale(10)
+					.color(0, 1, 0);
+				state.commentTimer = model.time;
+			} else if (freshHitType === 'great') {
+				if (commentText.nChildren() > 0) commentText.remove(0);
+				commentText
+					.add(clay.text(COMMENT.GREAT))
+					.move(freshHitPosition[0], freshHitPosition[1] + 0.1, LYRIC_Z)
+					.scale(10)
+					.color(1, 1, 0);
+				state.commentTimer = model.time;
+			} else if (newlyMissed) {
+				if (commentText.nChildren() > 0) commentText.remove(0);
+				commentText
+					.add(clay.text(COMMENT.MISSED))
+					.move(newlyMissed[0], newlyMissed[1] + 0.1, LYRIC_Z)
+					.scale(10)
+					.color(1, 0, 0);
+				state.commentTimer = model.time;
+			} else if (model.time - state.commentTimer > 1.0) {
+				// Clear comment after 1 second
+				if (commentText.nChildren() > 0) commentText.remove(0);
 			}
 		}
 
@@ -488,10 +482,42 @@ export const init = async (model) => {
 		if (hitQuit) {
 			quitBtn.color(1, 0.5, 0.5);
 			if (state.pressed) {
-				// console.log('Quit button pressed, resetting game state');
 				state.started = false;
 				state.activeSongIdx = null;
 				currentScore = 0;
+				state.currentBeatIdx = 0;
+
+				// Reset all beat nodes across all songs
+				for (let s = 0; s < lyricNodes.length; s++) {
+					for (let j = 0; j < lyricNodes[s].length; j++) {
+						lyricNodes[s][j].hit = false;
+						lyricNodes[s][j].missed = false;
+						lyricNodes[s][j].node
+							.identity()
+							.move(lyricNodes[s][j].position[0], lyricNodes[s][j].position[1], CUBE_START_Z)
+							.scale(0)
+							.opacity(0);
+					}
+				}
+
+				// Reset scoreboard text
+				if (scoreboard.nChildren() > 1) scoreboard.remove(1);
+
+				// Clear comment text
+				if (commentText.nChildren() > 0) commentText.remove(0);
+
+				// Re-add menu items
+				for (let i = 0; i < songs.length; i++) {
+					const menu = menuGroup
+						.add('square')
+						.move(0, startY - i * gapY, -0.5)
+						.scale(0.2, 0.2, 0.01)
+						.color(0.25, 0.35, 0.5);
+					menu.add(clay.text(songs[i].title))
+						.move(-0.3, -0.05, 0.01)
+						.color(0, 0, 0)
+						.scale(6);
+				}
 			}
 		} else {
 			quitBtn.color(1, 0, 0);

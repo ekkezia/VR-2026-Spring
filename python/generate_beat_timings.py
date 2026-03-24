@@ -22,6 +22,8 @@ def main():
     parser.add_argument('speed_div', nargs='?', default=1.0, type=float)
     parser.add_argument('image_path', nargs='?')
     parser.add_argument('--shuffle-grid', action='store_true', help='Randomize grid positions for x/y')
+    parser.add_argument('--perlin', action='store_true', help='Use Perlin noise for smooth organic beat positions')
+    parser.add_argument('--perlin-scale', type=float, default=0.18, help='How quickly positions drift between beats (default 0.18, higher = faster drift)')
     args, unknown = parser.parse_known_args()
 
     audio_file = args.audio_file
@@ -29,6 +31,8 @@ def main():
     speed_div = float(args.speed_div)
     image_path = args.image_path
     shuffle_grid = args.shuffle_grid
+    use_perlin = args.perlin
+    perlin_scale = args.perlin_scale
 
     img = None
     img_w, img_h = None, None
@@ -82,15 +86,35 @@ def main():
     if shuffle_grid:
         import random
         random.shuffle(grid_positions)
+    if use_perlin:
+        try:
+            from noise import pnoise1
+        except ImportError:
+            print("noise package not found. Install with: pip install noise")
+            sys.exit(1)
+        import random
+        offset_x = random.uniform(0, 1000)
+        offset_y = random.uniform(0, 1000)
+
+    x_range = (LYRIC_MAX_X - LYRIC_MIN_X) - 2 * x_margin
+    y_range = (LYRIC_MAX_Y - LYRIC_MIN_Y) - 2 * y_margin
+
     for i in range(num_beats):
         t = i * interval
-        row, col = grid_positions[i]
-        # Map grid position to normalized [0,1] coordinates
-        u = (col + 0.5) / grid_cols
-        v = (row + 0.5) / grid_rows
-        # Map normalized coordinates to VR scene coordinates
-        x = LYRIC_MIN_X + x_margin + u * x_range
-        y = LYRIC_MIN_Y + y_margin + v * y_range + row * y_margin
+        if use_perlin:
+            # pnoise1 returns [-1, 1]; remap to [0, 1] then to scene coords
+            u = (pnoise1(i * perlin_scale + offset_x) + 1) / 2
+            v = (pnoise1(i * perlin_scale + offset_y) + 1) / 2
+            x = LYRIC_MIN_X + x_margin + u * x_range
+            y = LYRIC_MIN_Y + y_margin + v * y_range
+        else:
+            row, col = grid_positions[i]
+            # Map grid position to normalized [0,1] coordinates
+            u = (col + 0.5) / grid_cols
+            v = (row + 0.5) / grid_rows
+            # Map normalized coordinates to VR scene coordinates
+            x = LYRIC_MIN_X + x_margin + u * x_range
+            y = LYRIC_MIN_Y + y_margin + v * y_range + row * y_margin
         color = None
         if img:
             # Map normalized coordinates to image pixel coordinates
