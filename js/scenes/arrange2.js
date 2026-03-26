@@ -2,8 +2,8 @@ import * as cg from "../render/core/cg.js";
 import { G2 } from "../util/g2.js";
 import { ControllerBeam } from "../render/core/controllerInput.js";
 
-window.sS = [];
-window.sC = [];
+window.sS = {length: 0}; // SHARED STATE OF THE BOARD
+window.sC = [];          // SHARED INPUT CURSORS FROM ALL CLIENTS
 
 export const init = async model => {
 
@@ -12,24 +12,20 @@ export const init = async model => {
    const colors = '#ff0000,#ff4000,#ffff00,#20d020,#0080ff,#6000ff,#e800a0,#ffffff'.split(',');
    const X = .75, move = [0,1.5,0], scale = .3;
 
-   let isFlipped = true;
-   let s = p => clientID == clients[0] ? p : [-p[0],p[1]];
+   let cursorStates = [];                                     // CURSOR STATE IN THE MASTER CLIENT
+   let s = p => clientID == clients[0] ? p : [-p[0],p[1]];    // FLIP X IF THIS IS THE SECOND CLIENT
 
-   // CREATE THE CONTROLLER BEAMS
+   let beams = { left : new ControllerBeam(model, 'left' ),   // CREATE THE CONTROLLER BEAMS
+                 right: new ControllerBeam(model, 'right') }; //
 
-   let beams = { left : new ControllerBeam(model, 'left' ),
-                 right: new ControllerBeam(model, 'right') };
 
-   // CREATE THE 2D CANVAS AND DECLARE IT TO BE A TEXTURE SOURCE
+   let g2 = new G2();                                         // CREATE THE 2D CANVAS, AND
+   model.txtrSrc(2, g2.getCanvas());                          // DECLARE IT TO BE A TEXTURE SOURCE
 
-   let g2 = new G2();
-   model.txtrSrc(2, g2.getCanvas());
+   let board = model.add('square').move(move).scale(scale)    // CREATE THE BOARD AND
+                    .dull().txtr(2);                          // TEXTURE IT WITH THE 2D CANVAS
 
-   // ADD THE BOARD TO THE SCENE AND TEXTURE IT WITH THE 2D CANVAS
-
-   let board = model.add('square').move(move).scale(scale).dull().txtr(2);
-
-   // SOME USEFUL PROCEDURALLY DEFINED SHAPES
+   // PROCEDURES THAT DEFINE SHAPES FOR PIECES
 
    let superquadric = (t, C, R) => {
       let x = Math.sin(2 * Math.PI * t);
@@ -63,9 +59,9 @@ export const init = async model => {
                               [x+a,y+b],[x+b,y+b],[x+b,y+a],
                               [x-b,y+a],[x-b,y+b],[x-a,y+b] ];
 
-   let drawShape = (type, p, color) => {    // DRAW A SHAPE, GIVEN LOCATION AND COLOR
-      g2.setColor(color);
-      switch (type) {
+   let drawShape = (type, p, color) => {                // DRAW A SHAPE GIVEN ITS LOCATION AND COLOR
+      g2.setColor(color);                               //
+      switch (type) {                                   //
       case 0: g2.fillCurve(10, t => regularPolygon(t, p, .09, 10, true)); break;
       case 1: g2.fillCurve( 3, t => regularPolygon(t, p, .075, 3)); break;
       case 2: g2.fillCurve( 4, t => regularPolygon(t, p, .075, 4)); break;
@@ -76,159 +72,132 @@ export const init = async model => {
       }
    }
 
-   let n2y = n => X-2*X/7*(n+.5);           // CONVERT BETWEEN Y and ICON INDEX
-   let y2n = y => (X-y)/(2*X/7) >> 0;
+   let n2y = n => X-2*X/7*(n+.5);                       // CONVERT BETWEEN Y and ICON INDEX
+   let y2n = y => (X-y)/(2*X/7) >> 0;                   //
 
-   let hit = hand => {                      // COMPUTE WHERE HAND OR BEAM INTERSECTS BOARD
+   let hit = hand => {                                  // COMPUTE WHERE HAND OR BEAM HITS THE BOARD
       if (isXR()) {
-         if (window.handtracking) {
-            let p = inputEvents.pos(hand);
-            if (p)
-               return s([ (p[0] - move[0]) / scale,
-                          (p[1] - move[1]) / scale ]); // IF USING HANDTRACKING
+         if (window.handtracking) {                            // IF USING HANDTRACKING
+            let p = inputEvents.pos(hand);                     //
+            if (p)                                             //
+               return s([ (p[0] - move[0]) / scale,            //
+                          (p[1] - move[1]) / scale ]);         //
          }
 
-         let h = beams[hand].hitRect(board.getGlobalMatrix());
-         if (h)
-            return s([h[0],h[1]]);                     // IF USING CONTROLLER BEAMS
+         let h = beams[hand].hitRect(board.getGlobalMatrix()); // IF USING CONTROLLER BEAMS
+         if (h)                                                //
+            return s([h[0],h[1]]);                             //
       }
    }
 
-   let findPiece = p => {                   // FIND THE FRONT-MOST PIECE AT THE CURSOR
-      for (let n = sS.length-1 ; n >= 0 ; n--)
-         if (Math.abs(sS[n].p[0] - p[0]) < .1 && Math.abs(sS[n].p[1] - p[1]) < .1)
-            return n;
+   let findPiece = p => {                              // FIND THE FRONT-MOST PIECE AT THE CURSOR
+      for (let n in sS)                                //
+         if (! isNaN(Number.parseInt(n)))              //
+            if (Math.abs(sS[n].p[0] - p[0]) < .1 && Math.abs(sS[n].p[1] - p[1]) < .1)
+               return n;                               //
    }
 
-   let setCursor = (hand, isPressed) => {
-      let id = 2 * clientID + (hand=='left' ? 0 : 1);
-      if (! sC[id])
-         sC[id] = {};
-      sC[id].isPressed = isPressed;
-      sC[id].p = hit(hand);
-      server.broadcastGlobalSlice('sC', id, id+1);
-   }
-
+   let setCursor = (hand, isPressed) => {              // RESPOND TO USER INPUT BY SENDING
+      let id = 2 * clientID + (hand=='left' ? 0 : 1);  // CURSOR INFO TO THE MASTER CLIENT
+      if (! sC[id])                                    //
+         sC[id] = {};                                  //
+      sC[id].isPressed = isPressed;                    //
+      sC[id].p = hit(hand);                            //
+      server.broadcastGlobalSlice('sC', id, id+1);     //
+   }                                                   //
    inputEvents.onPress   = hand => setCursor(hand, true);
    inputEvents.onDrag    = hand => setCursor(hand, true);
    inputEvents.onRelease = hand => setCursor(hand, false);
    inputEvents.onMove    = hand => setCursor(hand, false);
 
-   let states = [];                         // CURSOR STATE THE MASTER CLIENT MAINTAINS
-
-   let infoText = '';
-
    model.animate(() => {
 
       sC = server.synchronize('sC');
+      sS = server.synchronize('sS');
 
-      if (clientID == clients[0]) {           // IF I AM MASTER CLIENT, MODIFY SCENE STATE
+      if (clientID == clients[0]) {                    // IF I AM MASTER CLIENT, MODIFY SCENE
+         for (let nc in sC) {                          // BY RESPONDING TO THE CLIENT CURSORS
+            let cursor = sC[nc];                       //
+            let p = cursor.p;                          //
+                                                       //
+            let cursorID = 'cursor_' + nc;             //
+            if (! cursorStates[cursorID])              //
+               cursorStates[cursorID] = {};            //
+            let cursorState = cursorStates[cursorID];  //
 
-         for (let id in sC) {         // BY RESPONDING TO THE CURRENT STATE OF CLIENT CURSORS
+            // ON PRESS
 
-	    let isMaster = (id >> 1) == clients[0];
-
-	    let cursor = sC[id];
-	    let p = cursor.p;
-
-	    if (! states[id])
-	       states[id] = {};
-            let state = states[id];
-
-	    // ON PRESS
-
-	    if (! state.isPressed && cursor.isPressed) {
-               if (p && p[0] < -X) {          // PRESS ON A SHAPE ICON TO CREATE A NEW PIECE
-                  state.n = sS.length;
-                  sS.push({ type: y2n(p[1]), p: p, c: 7 });
+            if (! cursorState.isPressed && cursor.isPressed) {
+               if (p && p[0] < -X) {                   // PRESS ON A SHAPE TO CREATE A NEW PIECE
+                  cursorState.n = sS.length++;         //
+                  sS[cursorState.n] = { type: y2n(p[1]), p: p, c: 7 };
                }
-               if (p && p[0] > X) {           // PRESS ON A COLOR ICON TO DRAG THAT COLOR
-                  cursor.c = y2n(p[1]);
-                  cursor.cp = p;
-                  server.broadcastGlobal('sC');
-               }
-               if (p) {                       // PRESS ON A PIECE TO DRAG IT
-                  state.n = findPiece(p);
-               }
+               if (p && p[0] > X)                      // PRESS ON A COLOR TO DRAG THAT COLOR
+                  sS[cursorID] = { c: y2n(p[1]), p: p };
+               if (p)                                  // PRESS ON A PIECE TO DRAG IT
+                  cursorState.n = findPiece(p);        //
             }
 
-	    // ON DRAG
+            if (cursorState.isPressed && cursor.isPressed) {
 
-	    if (state.isPressed && cursor.isPressed) {
-               if (state.n !== undefined) {  // DRAGGING A PIECE
-                  if (p)
-                     sS[state.n].p = p;
-               }
-               if (cursor.c !== undefined) {  // DRAGGING A COLOR
-		  if (! isMaster)
-		     frameColor = '#ff0000';
-                  if (p) {
-                     cursor.cp = p;
-                     server.broadcastGlobal('sC');
-                  }
-               }
+               if (p && cursorState.n !== undefined)   // DRAGGING A PIECE
+                  sS[cursorState.n].p = p;             //
+
+               if (p && sS[cursorID] !== undefined)    // DRAGGING A COLOR
+                  sS[cursorID].p = p;                  //
             }
 
-	    // ON RELEASE
+            // ON RELEASE
 
-	    if (state.isPressed && ! cursor.isPressed) {
-               let n = state.n; 
+            if (cursorState.isPressed && ! cursor.isPressed) {
+               let n = cursorState.n;                  // DRAG A PIECE OFF THE BOARD TO DELETE IT
                if (n !== undefined && Math.abs(sS[n].p[0]) > X)
-                  sS.splice(n, 1);
-               delete state.n;               // DRAG A PIECE OFF THE BOARD TO DELETE IT
+                  delete sS[n];                        //
+               delete cursorState.n;                   //
 
-               if (cursor.c !== undefined) {
-                  if (p) {                    // DROP A COLOR ON A PIECE TO CHANGE PIECE COLOR
-                     let n = findPiece(p);
-                     if (n !== undefined)
-                        sS[n].c = cursor.c;
-                  }
-               }
-               delete cursor.c;
-               server.broadcastGlobal('sC');
+               if (p && sS[cursorID] !== undefined) {
+                  let n = findPiece(p);                // DROP A COLOR ON PIECE TO CHANGE ITS COLOR
+                  if (n !== undefined)                 //
+                     sS[n].c = sS[cursorID].c;         //
+               }                                       //
+               delete sS[cursorID];                    //
             }
 
-	    state.isPressed = cursor.isPressed;
+            cursorState.isPressed = cursor.isPressed;  // UPDATE "IS PRESSED" FOR THIS CURSOR
          }
-         server.broadcastGlobal('sS');       // MASTER CLIENT SENDS THE NEW STATE TO ALL CLIENTS
+         server.broadcastGlobal('sS');                 // MASTER CLIENT UPDATES STATE OF ALL CLIENTS
       }
 
-      for (let hand in beams)                             // UPDATE THE CONTROLLER BEAMS
+      for (let hand in beams)                                       // UPDATE THE CONTROLLER BEAMS
          beams[hand].update();
 
-      g2.clear();                                         // CLEAR THE BOARD
-      g2.lineWidth(.005);
-      g2.setColor('#ffffff');
-      g2.drawRect(-X,-X,2*X,2*X);                         // DRAW A FRAME AROUND THE BOARD
+      g2.clear();                                                   // CLEAR THE BOARD AND DRAW
+      g2.lineWidth(.005);                                           // AN OUTLINE AROUND THE BOARD
+      g2.setColor('#ffffff');                                       //
+      g2.drawRect(-X,-X,2*X,2*X);                                   //
 
-      g2.text(infoText, 0, .8);
-
-      for (let type = 0 ; type < 7 ; type++)              // DRAW THE SHAPE ICONS
+      for (let type = 0 ; type < 7 ; type++)                        // DRAW THE SHAPE ICONS
          drawShape(type, s([-X*1.12, n2y(type)]), colors[7] + 'd0');
 
-      for (let n = 0 ; n < 7 ; n++) {                     // DRAW THE COLOR ICONS
+      for (let n = 0 ; n < 7 ; n++) {                               // DRAW THE COLOR ICONS
          g2.setColor(colors[n] + 'd0');
          g2.fillCurve(32, t => superquadric(t, s([X*1.12,n2y(n)]), .058));
       }
 
-      for (let n = 0 ; n < sS.length ; n++)             // DRAW ALL THE PIECES ON THE BOARD
-         drawShape(sS[n].type, s(sS[n].p), colors[sS[n].c]);
-
-      for (let id in sC) { 
-         let cursor = sC[id];
-
-         if (cursor.c !== undefined) {                     // IF COLOR DRAGGING, DRAW COLOR ICON
-            g2.setColor(colors[cursor.c] + 'd0');
-            g2.fillCurve(32, t => superquadric(t, s(cursor.cp), .058));
+      for (let id in sS)
+         if (! isNaN(Number.parseInt(id)))                          // DRAW THE PIECES ON THE BOARD
+            drawShape(sS[id].type, s(sS[id].p), colors[sS[id].c]);
+         else if (id != 'length' && sS[id] !== undefined) {         // IF COLOR DRAGGING, DRAW COLOR
+            g2.setColor(colors[sS[id].c] + 'd0');
+            g2.fillCurve(32, t => superquadric(t, s(sS[id].p), .058));
          }
 
-         let p = cursor.p;                                // SHOW THE CURSOR ON THE BOARD
-         if (p) {
-            let x = p[0], y = p[1], r = .014;
-            g2.lineWidth(cursor.isPressed ? .01 : .005);
-            g2.setColor('#000000').line(s([x-r,y-r]),s([x+r,y+r]))
-	                          .line(s([x-r,y+r]),s([x+r,y-r]));
+      for (let id in sC)                                            // SHOW THE CURSORS ON THE BOARD
+         if (sC[id].p) {                                            //
+            let x = sC[id].p[0], y = sC[id].p[1], r = .014;         //
+            g2.lineWidth(sC[id].isPressed ? .01 : .005);            //
+            g2.setColor('#000000').line(s([x-r,y-r]),s([x+r,y+r]))  //
+                                  .line(s([x-r,y+r]),s([x+r,y-r])); //
          }
-      }
    });
 }
