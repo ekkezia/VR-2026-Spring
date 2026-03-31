@@ -42,10 +42,12 @@ export default () => {
          { name: "beat"        , path: "./beam4.js"        , public: true },
          { name: "beat2"        , path: "./beam2.js"        , public: true },
 
-         { name: "aiHelper"     , path: "./aiQuery.js"    , public: true },
+         { name: "aiHelper"     , path: "./aiQuery.js"      , public: true },
          { name: "parse3"       , path: "./parse3.js"       , public: true },
          { name: "arrange"      , path: "./arrange.js"      , public: true },
          { name: "arrange2"     , path: "./arrange2.js"     , public: true },
+         { name: "widgets"      , path: "./widgets.js"      , public: true },
+         { name: "transfer"     , path: "./transfer.js"     , public: true },
       ]
    };
 }
