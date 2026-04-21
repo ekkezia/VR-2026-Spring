@@ -84,14 +84,14 @@ export const init = async (model) => {
 
       // Show "thinking..." while waiting
       if (responseLabel.nChildren() > 0) responseLabel.remove(0);
-      responseLabel.add(clay.text('thinking...')).move(-0.5, 1.5, -2).scale(10).color(1, 1, 0);
+      responseLabel.add(clay.text('thinking...')).move(-0.5, 1.5, -2).scale(4).color(1, 1, 0);
 
       fetch('http://localhost:11434/api/generate', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({
             model: 'llava',
-            prompt: 'This is a VR drawing made of dots. What object or shape does it look like? Answer in 5 words or less.',
+            prompt: 'This is a VR drawing made of dots. What Chinese character does it look like? Give several options and give it in both hanzi and pinyin.',
             images: [base64],
             stream: false,
          }),
@@ -101,11 +101,11 @@ export const init = async (model) => {
          const answer = data.response ?? 'no response';
          console.log('Ollama answer:', answer);
          if (responseLabel.nChildren() > 0) responseLabel.remove(0);
-         responseLabel.add(clay.text(answer)).move(-0.5, 1.5, -2).scale(10).color(0, 1, 1);
+         responseLabel.add(clay.text(answer)).move(-0.5, 1.5, -2).scale(4).color(0, 1, 1);
       })
       .catch(err => {
          if (responseLabel.nChildren() > 0) responseLabel.remove(0);
-         responseLabel.add(clay.text('error')).move(-0.5, 1.5, -2).scale(10).color(1, 0, 0);
+         responseLabel.add(clay.text('error')).move(-0.5, 1.5, -2).scale(4).color(1, 0, 0);
          console.error(err);
       });
    };

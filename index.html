@@ -59,7 +59,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   <div id=videoElement></div>
   <canvas id=anidrawCanvas width=1024 height=960  style="position:absolute;left:-2000px;"></canvas>
   <canvas id=webcamCanvas width=640 height=480  style="position:absolute;left:-2000px;"></canvas>
-
+  <canvas id=textureCanvas style="position:fixed;right:0;bottom:0;width:480px;height:300px;z-index:9999;pointer-events:none;border:1px solid red;"></canvas>
   <header id=header>
     <details open id="header-details">
       <summary>Welcome to the FutureClassroom!!</summary>
@@ -75,16 +75,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <!-- local audio -->
     <audio id="local_webrtc" autoplay></audio>
   </div>
-
-  <!-- Karaoke demo -->
-  <section style="margin:2em 0;text-align:center">
-    <h2>Karaoke Demo: Cosmic Girl</h2>
-    <audio id="karaoke-audio" controls style="width:60%">
-      <source src="media/sound/music/cosmicgirl.mp3" type="audio/mpeg">
-      Your browser does not support the audio element.
-    </audio>
-    <div id="karaoke-lyrics" style="font-size:2em;margin-top:1em;color:#e91e63;background:#fff;padding:0.5em;border-radius:8px;box-shadow:0 2px 8px #0002;min-height:2em;text-shadow:1px 1px 2px #0006;"></div>
-  </section>
 
   <script type="module" src="/js/main.js"></script>
   <!-- <script type="module">
