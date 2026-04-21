@@ -14,6 +14,7 @@
     "holojam-node": "^0.2.3",
     "node-fetch": "^2.6.7",
     "node-wit": "^6.6.0",
+    "nvm": "^0.0.4",
     "peerjs": "^1.5.2",
     "realtime-bpm-analyzer": "^5.0.1",
     "socket.io": "^4.8.0",

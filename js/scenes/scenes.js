@@ -1,36 +1,41 @@
-import * as global from "../global.js";
-import { Gltf2Node } from "../render/nodes/gltf2.js";
+import * as global from '../global.js';
+import { Gltf2Node } from '../render/nodes/gltf2.js';
 
 export default () => {
-   global.scene().addNode(new Gltf2Node({
-      url: ""
-   })).name = "backGround";
+	global.scene().addNode(
+		new Gltf2Node({
+			url: '',
+		}),
+	).name = 'backGround';
 
-   return {
-      enableSceneReloading: true,
-      scenes: [ 
-         { name: "shapes"       , path: "./shapes.js"       , public: true },
-         { name: "joints"       , path: "./joints.js"       , public: true },
-         { name: "inputTest1"   , path: "./inputTest1.js"   , public: true },
-         { name: "flag"         , path: "./flag.js"         , public: true },
-         { name: "bouncing"     , path: "./bouncing.js"     , public: true },
-         { name: "multiplayer1" , path: "./multiplayer1.js" , public: true },
-         { name: "text1"        , path: "./text1.js"        , public: true },
-         { name: "text2"        , path: "./text2.js"        , public: true },
-         { name: "text3"        , path: "./text3.js"        , public: true },
-         { name: "text-ascii"        , path: "./text-ascii.js"        , public: true },
-         { name: "co-draw2"        , path: "./co-draw2.js"        , public: true },
-         { name: "co-mold"        , path: "./co-mold.js"        , public: true },
-         { name: "input-test"        , path: "./inputTest.js"        , public: true },
-         { name: "dna"        , path: "./dna.js"        , public: true },
-         { name: "text6"        , path: "./text6.js"        , public: true },
-         { name: "text6WithAI"  , path: "./text6WithAI.js"  , public: true },
-         { name: "text7"        , path: "./text7.js"        , public: true },
-         { name: "text8"        , path: "./text8.js"        , public: true },
-         { name: "dissolve"     , path: "./dissolve.js"     , public: true },
-         { name: "master1"      , path: "./master1.js"      , public: true },
-         { name: "bouncing"     , path: "./bouncing.js"     , public: true },
-         { name: "parse1"       , path: "./parse1.js"       , public: true },
+	return {
+		enableSceneReloading: false,
+		scenes: [
+			{ name: 'shapes', path: './shapes.js', public: true },
+			{ name: 'joints', path: './joints.js', public: true },
+			{ name: 'inputTest1', path: './inputTest1.js', public: true },
+			{ name: 'flag', path: './flag.js', public: true },
+			{ name: 'bouncing', path: './bouncing.js', public: true },
+			{ name: 'multiplayer1', path: './multiplayer1.js', public: true },
+			{ name: 'text1', path: './text1.js', public: true },
+			{ name: 'text2', path: './text2.js', public: true },
+			{ name: 'text3', path: './text3.js', public: true },
+			// { name: 'text-ascii', path: './text-ascii.js', public: true },
+			{ name: "test-ascii-sphere"        , path: "./text-ascii-sphere.js"        , public: true },
+			{ name: 'co-draw2', path: './co-draw2.js', public: true },
+			{ name: 'co-mold', path: './co-mold.js', public: true },
+			{ name: 'minecraft-mold', path: './minecraft-mold.js', public: true },
+
+			{ name: 'input-test', path: './inputTest.js', public: true },
+			{ name: 'dna', path: './dna.js', public: true },
+			{ name: 'text6', path: './text6.js', public: true },
+			{ name: 'text6WithAI', path: './text6WithAI.js', public: true },
+			{ name: 'text7', path: './text7.js', public: true },
+			{ name: 'text8', path: './text8.js', public: true },
+			{ name: 'dissolve', path: './dissolve.js', public: true },
+			{ name: 'master1', path: './master1.js', public: true },
+			{ name: 'bouncing', path: './bouncing.js', public: true },
+			{ name: 'parse1', path: './parse1.js', public: true },
 
          { name: "beam"         , path: "./beam.js"         , public: true },
          { name: "headGaze"     , path: "./headGaze.js"     , public: true },
@@ -48,8 +53,14 @@ export default () => {
          { name: "arrange2"     , path: "./arrange2.js"     , public: true },
          { name: "widgets"      , path: "./widgets.js"      , public: true },
          { name: "transfer"     , path: "./transfer.js"     , public: true },
+
+		 { name: "lasso"      , path: "./lasso.js"      , public: true },
+		 { name: "lasso2"     , path: "./lasso2.js"     , public: true },
+		 { name: "lasso3"     , path: "./lasso3.js"      , public: true },
+		 { name: "lasso4"     , path: "./lasso4.js"      , public: true },
+		 { name: "tutorial"   , path: "./tutorial.js"    , public: true },
+		  { name: "lasso-strict"   , path: "./lasso-strict.js"    , public: true },
       ]
    };
 }
-
 

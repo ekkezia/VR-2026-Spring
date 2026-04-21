@@ -94,7 +94,7 @@ export function ControllerBeam(model, hand) {
                 this.m = m.length ? cg.mMultiply(m, cg.mTranslate(offset))
                                   : cg.mTranslate(fallback));
 
-      if (matrix) {
+      if (window.handtracking) {
          let r = ! clay.handsWidget.point[hand] ? 0 :
                    clay.handsWidget.pinch[hand] ? .0015 : .0005;
          this.beam.child(0).identity().move(0,0,-10.14).scale(r,r,10);
@@ -158,4 +158,3 @@ export let controllerEventTypes = () => {
          }
    return eventTypes;
 }
-

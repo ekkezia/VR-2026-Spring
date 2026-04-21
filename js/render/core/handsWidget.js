@@ -38,6 +38,12 @@ export function HandsWidget(widgets) {
       }
    }
 
+   // Grace period: number of consecutive bad frames before hiding the skeleton.
+   // This absorbs single-frame tracking glitches where window.handtracking
+   // briefly flips to false (controller fallback) or handSize spikes.
+   let hideGrace = 0;
+   const HIDE_GRACE_FRAMES = 45;
+
    this.update = () => {
 
       // IF HAND SIZE BLOWS UP, THEN DO NOT SHOW THE HANDS WIDGET.
@@ -48,12 +54,17 @@ export function HandsWidget(widgets) {
          let hi = [-1000,-1000,-1000];
          for (let n = 0 ; n < jointMatrix[hand].length ; n++) {
            let mat = jointMatrix[hand][n].mat;
+           // Skip joints still at the default identity origin — they haven't
+           // received real tracking data yet. Including them inflates the
+           // bounding box from origin → real hand position (≥1 m), which
+           // wrongly hides the skeleton during tracking initialisation.
+           if (mat[12] === 0 && mat[13] === 0 && mat[14] === 0) continue;
            for (let i = 0 ; i < 3 ; i++) {
              lo[i] = Math.min(lo[i], mat[12+i]);
              hi[i] = Math.max(hi[i], mat[12+i]);
            }
          }
-         handSize[hand] = cg.distance(lo, hi);
+         handSize[hand] = lo[0] < 1000 ? cg.distance(lo, hi) : 0;
       }
 
       let th = [.013,.011,.011,.011,.01];
@@ -189,7 +200,9 @@ export function HandsWidget(widgets) {
             setColor(3, P[3]?3:0);
             setColor(4, P[4]?4:0);
          }
-      } else 
-         hands.scale(0);
+         hideGrace = 0;
+      } else {
+         if (++hideGrace > HIDE_GRACE_FRAMES) hands.scale(0);
+      }
    };
  }
