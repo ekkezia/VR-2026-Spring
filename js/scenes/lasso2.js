@@ -2,6 +2,7 @@ import * as cg from "../render/core/cg.js";
 import {
   ControllerBeam,
   buttonState,
+  controllerMatrix,
 } from "../render/core/controllerInput.js";
 
 const preferredHand = "right";
@@ -20,6 +21,7 @@ const ACTION_BUTTON_THRESHOLD = 0.65;
 const HINT_PANEL_SCALE = 0.0003;
 const HINT_PANEL_WIDTH = 231; // px from figma
 const HINT_PANEL_HEIGHT = 100;
+const COMPUTER_CANVAS_INSTRUCTION_OFFSET = [0, 0.095, 0.045];
 const MAX_HOVER_DEPTH = 3.0;
 const MAX_SHARED_TEXTURE_EDGE = 512;
 const MIN_SHARED_TEXTURE_EDGE = 256;
@@ -2146,6 +2148,7 @@ export const init = async (model) => {
     }
   }
   initHintTextures();
+  model.txtrSrc(COMPUTER_CANVAS_INSTRUCTION.id, COMPUTER_CANVAS_INSTRUCTION.texture);
 
   function getHintTextureId(actionName, modeName = null) {
     if (modeName) {
@@ -2169,7 +2172,7 @@ export const init = async (model) => {
   }
 
   function resolveHintAnchorPosition(anchor, offset) {
-    if (!anchor || !Array.isArray(anchor)) return null;
+    if (!anchor || typeof anchor.length !== "number") return null;
     const ox = offset && offset.length > 0 ? offset[0] : 0;
     const oy = offset && offset.length > 1 ? offset[1] : 0;
     const oz = offset && offset.length > 2 ? offset[2] : 0;
@@ -2239,20 +2242,40 @@ export const init = async (model) => {
   const grabHint = createControllerHint("GRAB");
   const saveHint = createControllerHint("SAVE");
   const calibrateHint = createControllerHint("CALIBRATE");
+  const computerCanvasInstructionHint = hintRoot
+    .add("square")
+    .move(0, 0, -0.0005)
+    .scale(
+      HINT_PANEL_WIDTH * HINT_PANEL_SCALE,
+      HINT_PANEL_HEIGHT * HINT_PANEL_SCALE,
+      1
+    )
+    .color(1, 1, 1)
+    .opacity(0)
+    .dull()
+    .setTxtr(COMPUTER_CANVAS_INSTRUCTION.texture);
 
-  function updateControllerHints(anchorPos = null) {
-    if (!anchorPos) {
+  function updateControllerHints(anchorPos = null, leftAnchorPos = null) {
+    const controlAnchor = anchorPos || leftAnchorPos;
+    const instructionAnchor = leftAnchorPos || controlAnchor;
+    if (!controlAnchor && !instructionAnchor) {
       setHintVisible(selectHint, false);
       setHintVisible(grabHint, false);
       setHintVisible(saveHint, false);
       setHintVisible(calibrateHint, false);
+      setHintVisible(computerCanvasInstructionHint, false);
       return;
     }
 
-    placeHint(selectHint, anchorPos, getHintOffset("SELECT"));
-    placeHint(grabHint, anchorPos, getHintOffset("GRAB"));
-    placeHint(saveHint, anchorPos, getHintOffset("SAVE"));
-    placeHint(calibrateHint, anchorPos, getHintOffset("CALIBRATE"));
+    placeHint(selectHint, controlAnchor, getHintOffset("SELECT"));
+    placeHint(grabHint, controlAnchor, getHintOffset("GRAB"));
+    placeHint(saveHint, controlAnchor, getHintOffset("SAVE"));
+    placeHint(calibrateHint, controlAnchor, getHintOffset("CALIBRATE"));
+    placeHint(
+      computerCanvasInstructionHint,
+      instructionAnchor,
+      COMPUTER_CANVAS_INSTRUCTION_OFFSET
+    );
 
     if (!computerCanvasPlacementConfirmed) {
       setHintVisible(selectHint, false);
@@ -2260,6 +2283,7 @@ export const init = async (model) => {
       setHintVisible(saveHint, false);
       setHintVisible(calibrateHint, true);
       updateHint(calibrateHint, ["CALIBRATE", "CONFIRM_COMPUTER_CANVAS"]);
+      setHintVisible(computerCanvasInstructionHint, !!instructionAnchor);
       return;
     }
 
@@ -2310,6 +2334,7 @@ export const init = async (model) => {
     );
     setHintVisible(calibrateHint, true);
     updateHint(calibrateHint, ["CALIBRATE", "CALIBRATE_COMPUTER_CANVAS"]);
+    setHintVisible(computerCanvasInstructionHint, false);
   }
 
   const safeVibrate = (hand, intensity, duration) => {
@@ -2334,8 +2359,6 @@ export const init = async (model) => {
   let computerCanvasHitVolume = null;
   let computerCanvasPreviewRoot = null;
   let computerCanvasPlacementSquare = null;
-  let computerCanvasInstructionFront = null;
-  let computerCanvasInstructionBack = null;
   let computerCanvasPlacementConfirmed = !isHeadsetClient;
   let computerCanvasHalfWidth = COMPUTER_CANVAS_WIDTH * COMPUTER_CANVAS_SCALE;
   let computerCanvasHalfHeight = COMPUTER_CANVAS_HEIGHT * COMPUTER_CANVAS_SCALE;
@@ -2454,25 +2477,6 @@ export const init = async (model) => {
       .color(0.2, 0.95, 1.6)
       .opacity(visible ? 0.55 : 0)
       .dull();
-    if (computerCanvasInstructionFront) {
-      computerCanvasInstructionFront
-        .identity()
-        .move(0, 0, 1.006)
-        .scale(sx, sy, 1)
-        .color(1, 1, 1)
-        .opacity(visible ? 0.98 : 0)
-        .dull();
-    }
-    if (computerCanvasInstructionBack) {
-      computerCanvasInstructionBack
-        .identity()
-        .move(0, 0, 1.006)
-        .turnY(Math.PI)
-        .scale(sx, sy, 1)
-        .color(1, 1, 1)
-        .opacity(visible ? 0.98 : 0)
-        .dull();
-    }
   };
 
   const isComputerCanvasConfirmPressed = () => {
@@ -2550,31 +2554,13 @@ export const init = async (model) => {
       .opacity(0.55)
       .dull();
     placementSquare.computerCanvasPlacementName = COMPUTER_CANVAS_PLACEMENT_NAME;
-    const instructionFront = root
-      .add("square")
-      .color(1, 1, 1)
-      .opacity(0)
-      .dull();
-    const instructionBack = root
-      .add("square")
-      .turnY(Math.PI)
-      .color(1, 1, 1)
-      .opacity(0)
-      .dull();
-    return { root, volume, placementSquare, instructionFront, instructionBack };
+    return { root, volume, placementSquare };
   }
   {
-    model.txtrSrc(COMPUTER_CANVAS_INSTRUCTION.id, COMPUTER_CANVAS_INSTRUCTION.texture);
     const marker = createComputerCanvasMarker();
     computerCanvasMarkerRoot = marker.root;
     computerCanvasHitVolume = marker.volume;
     computerCanvasPlacementSquare = marker.placementSquare;
-    computerCanvasInstructionFront = marker.instructionFront;
-    computerCanvasInstructionBack = marker.instructionBack;
-    if (computerCanvasInstructionFront)
-      computerCanvasInstructionFront.txtr(COMPUTER_CANVAS_INSTRUCTION.id);
-    if (computerCanvasInstructionBack)
-      computerCanvasInstructionBack.txtr(COMPUTER_CANVAS_INSTRUCTION.id);
     computerCanvasPreviewRoot = computerCanvasMarkerRoot.add();
     applyComputerCanvasMarkerTransform(
       COMPUTER_CANVAS_POS,
@@ -3411,7 +3397,14 @@ export const init = async (model) => {
       }
       renderComputerCanvasBoard(sharedCaptureState.partnerBoard);
       if (!isHeadsetClient) drawPartnerCanvas(sharedCaptureState.partnerBoard);
-      updateControllerHints(clientState.hand(clientID, preferredHand));
+      const rightHintAnchor =
+        clientState.hand(clientID, preferredHand) ||
+        clientState.hand(clientID, "right") ||
+        controllerMatrix[preferredHand] ||
+        controllerMatrix.right;
+      const leftHintAnchor =
+        clientState.hand(clientID, "left") || controllerMatrix.left;
+      updateControllerHints(rightHintAnchor, leftHintAnchor);
       updateComputerCanvasPlacementCalibration();
 
       if (!dragging && hoveredMarker && model.time % 0.18 < 0.05)
