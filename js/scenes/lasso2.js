@@ -32,6 +32,13 @@ const COMPUTER_CANVAS_WIDTH = 3024; // px from figma
 const COMPUTER_CANVAS_HEIGHT = 1964; // px from figma
 const COMPUTER_CANVAS_POS = [0, 1.28, -0.30];
 const COMPUTER_CANVAS_HALF_DEPTH = 0.1;
+const COMPUTER_CANVAS_MIN_HALF_WIDTH = 0.06;
+const COMPUTER_CANVAS_MIN_HALF_HEIGHT = 0.04;
+const COMPUTER_CANVAS_MAX_HALF_WIDTH = 1.6;
+const COMPUTER_CANVAS_MAX_HALF_HEIGHT = 1.2;
+// From inputEvents.js sync logic: button index 5 corresponds to Y/B.
+const COMPUTER_CANVAS_CONFIRM_BUTTON = 5;
+const COMPUTER_CANVAS_PLACEMENT_NAME = "computer_canvas_placement";
 const PARTNER_CANVAS_WIDTH = 1024;
 const PARTNER_CANVAS_HEIGHT = 682;
 const PARTNER_POSITION_SYNC_MIN_MS = 33;
@@ -43,6 +50,7 @@ const SHOW_SCREEN_CAPTURE_DEBUG_POPUP = true;
 const SCREEN_CAPTURE_DEBUG_POPUP_NAME = "Lasso2ScreenCaptureDebug";
 const SCREEN_CAPTURE_DEBUG_POPUP_WIDTH = 480;
 const SCREEN_CAPTURE_DEBUG_POPUP_HEIGHT = 270;
+const PARTNER_CANVAS_INTERACTION_VERSION = "2026-04-23-partner-drag-v1";
 
 let screenCanvas = null;
 let screenCaptureActive = false;
@@ -350,8 +358,27 @@ function ensurePartnerCanvasWindow() {
 
   if (canvas.__lasso2HoverItemId === undefined) canvas.__lasso2HoverItemId = null;
   if (canvas.__lasso2DragItemId === undefined) canvas.__lasso2DragItemId = null;
-  if (!canvas.__lasso2InteractionsInstalled) {
-    canvas.__lasso2InteractionsInstalled = true;
+    if (
+    canvas.__lasso2InteractionVersion !== PARTNER_CANVAS_INTERACTION_VERSION
+  ) {
+    if (canvas.__lasso2InteractionHandlers) {
+      const h = canvas.__lasso2InteractionHandlers;
+      if (h.supportsPointer) {
+        canvas.removeEventListener("pointerdown", h.beginDrag);
+        canvas.removeEventListener("pointermove", h.moveDrag);
+        canvas.removeEventListener("pointerup", h.endDrag);
+        canvas.removeEventListener("pointercancel", h.endDrag);
+        canvas.removeEventListener("lostpointercapture", h.endDrag);
+        canvas.removeEventListener("pointerleave", h.clearHover);
+      } else {
+        canvas.removeEventListener("mousedown", h.beginDrag);
+        popup.document.removeEventListener("mousemove", h.moveDrag);
+        popup.document.removeEventListener("mouseup", h.endDrag);
+        canvas.removeEventListener("mouseleave", h.clearHover);
+      }
+      popup.removeEventListener("blur", h.onBlur);
+    }
+    canvas.__lasso2InteractionVersion = PARTNER_CANVAS_INTERACTION_VERSION;
     canvas.style.cursor = "default";
     const toCanvasPoint = (event) => {
       const rect = canvas.getBoundingClientRect();
@@ -389,6 +416,19 @@ function ensurePartnerCanvasWindow() {
     const setHoverItem = (id) => {
       canvas.__lasso2HoverItemId = id || null;
     };
+    const mutatePartnerBoard = (mutateFn) => {
+      if (typeof mutateFn !== "function") return false;
+      const candidates = [window, popup, window.opener, popup.opener].filter(
+        Boolean
+      );
+      for (const candidate of candidates) {
+        if (typeof candidate.lasso2PartnerBoardMutate === "function") {
+          candidate.lasso2PartnerBoardMutate(mutateFn);
+          return true;
+        }
+      }
+      return false;
+    };
 
     let drag = null;
     const refreshHover = (event) => {
@@ -406,6 +446,7 @@ function ensurePartnerCanvasWindow() {
     };
 
     const beginDrag = (event) => {
+      if (event && event.button != null && event.button !== 0) return;
       if (event && event.preventDefault) event.preventDefault();
       const picked = refreshHover(event);
       if (!picked) return;
@@ -418,8 +459,7 @@ function ensurePartnerCanvasWindow() {
       canvas.__lasso2DragItemId = drag.id;
       setHoverItem(drag.id);
       setCursor("grabbing");
-      if (typeof window.lasso2PartnerBoardMutate === "function") {
-        window.lasso2PartnerBoardMutate((nextBoard) => {
+      mutatePartnerBoard((nextBoard) => {
           const itemsNext = nextBoard.items || [];
           const target = itemsNext.find((it) => it.id === drag.id);
           if (!target) return;
@@ -429,7 +469,6 @@ function ensurePartnerCanvasWindow() {
           );
           target.layer = maxLayer + 1;
         });
-      }
       if (event && event.pointerId != null && canvas.setPointerCapture) {
         try {
           canvas.setPointerCapture(event.pointerId);
@@ -442,17 +481,17 @@ function ensurePartnerCanvasWindow() {
         refreshHover(event);
         return;
       }
-      if (typeof window.lasso2PartnerBoardMutate !== "function") return;
       if (event && event.preventDefault) event.preventDefault();
       const p = toCanvasPoint(event);
       const nextX = p.x - drag.dx;
       const nextY = p.y - drag.dy;
       setHoverItem(drag.id);
-      window.lasso2PartnerBoardMutate((nextBoard) => {
+      mutatePartnerBoard((nextBoard) => {
         const target = (nextBoard.items || []).find((it) => it.id === drag.id);
         if (!target) return;
-        target.x = nextX;
-        target.y = nextY;
+        const clamped = clampPartnerBoardXY(nextX, nextY, target.w, target.h);
+        target.x = clamped.x;
+        target.y = clamped.y;
       });
     };
 
@@ -486,10 +525,19 @@ function ensurePartnerCanvasWindow() {
       popup.document.addEventListener("mouseup", endDrag);
       canvas.addEventListener("mouseleave", clearHover);
     }
-    popup.addEventListener("blur", () => {
+    const onBlur = () => {
       endDrag();
       clearHover();
-    });
+    };
+    popup.addEventListener("blur", onBlur);
+    canvas.__lasso2InteractionHandlers = {
+      supportsPointer,
+      beginDrag,
+      moveDrag,
+      endDrag,
+      clearHover,
+      onBlur,
+    };
   }
 
   const ctx = canvas.getContext("2d");
@@ -2028,9 +2076,19 @@ export const init = async (model) => {
   let hoveredArea = null;
   let dragging = null;
 
+  let COMPUTER_CANVAS_INSTRUCTION = {
+    id: 15,
+    texture: "../media/icons/computer-canvas-instruction.png",
+  };
+  let BUTTON_LOC_CONFIG = {
+    SELECT: [-0.09, -0.012, 0.055],
+    GRAB: [-0.08, -0.08, 0.055],
+    SAVE: [0.11, -0.01, 0.05],
+    CALIBRATE: [0.09, -0.015, 0.05],
+  };
   let HINT_CONFIG = {
     SELECT: {
-      OFFSET: [-0.09, -0.012, 0.055],
+      button: 1,
       POINT: {
         id: 1,
         texture: "../media/icons/select-point.png",
@@ -2041,7 +2099,7 @@ export const init = async (model) => {
       },
     },
     GRAB: {
-      OFFSET: [-0.08, -0.08, 0.055],
+      button: 2,
       POINT: {
         id: 3,
         texture: "../media/icons/grab-point.png",
@@ -2052,25 +2110,63 @@ export const init = async (model) => {
       },
     },
     SAVE: {
-      OFFSET: [0.11, -0.01, 0.05],
+      button: 3,
       POINT: {
         id: 5,
-        texture: "../media/icons/grab-point.png",
+        texture: "../media/icons/a-save.png",
+      },
+    },
+    CALIBRATE: {
+      button: 4,
+      CALIBRATE_COMPUTER_CANVAS: {
+        id: 6,
+        texture: "../media/icons/b-calibrate.png",
+      },
+      CONFIRM_COMPUTER_CANVAS: {
+        id: 7,
+        texture: "../media/icons/b-confirm.png",
       },
     },
   };
 
+  const hintTextureIdByKey = new Map();
+
   function initHintTextures() {
+    let nextHintTextureId = 8;
     for (const action in HINT_CONFIG) {
       for (const mode in HINT_CONFIG[action]) {
         const hintInfo = HINT_CONFIG[action][mode];
         if (!hintInfo || typeof hintInfo !== "object" || !hintInfo.texture)
           continue;
-        model.txtrSrc(hintInfo.id, hintInfo.texture);
+        const key = `${action}:${mode}`;
+        const txtrId = nextHintTextureId++;
+        hintTextureIdByKey.set(key, txtrId);
+        model.txtrSrc(txtrId, hintInfo.texture);
       }
     }
   }
   initHintTextures();
+
+  function getHintTextureId(actionName, modeName = null) {
+    if (modeName) {
+      const keyed = hintTextureIdByKey.get(`${actionName}:${modeName}`);
+      if (Number.isFinite(keyed)) return keyed;
+    }
+    const pointFallback = hintTextureIdByKey.get(`${actionName}:POINT`);
+    if (Number.isFinite(pointFallback)) return pointFallback;
+    for (const [key, value] of hintTextureIdByKey.entries()) {
+      if (key.startsWith(`${actionName}:`) && Number.isFinite(value))
+        return value;
+    }
+    return null;
+  }
+
+  function getHintOffset(actionName) {
+    const cfg = BUTTON_LOC_CONFIG && BUTTON_LOC_CONFIG[actionName];
+    if (Array.isArray(cfg)) return cfg;
+    if (cfg && Array.isArray(cfg.OFFSET)) return cfg.OFFSET;
+    return [0, 0, 0];
+  }
 
   function resolveHintAnchorPosition(anchor, offset) {
     if (!anchor || !Array.isArray(anchor)) return null;
@@ -2114,9 +2210,10 @@ export const init = async (model) => {
       .move(0, 0, -0.0005)
       .scale(HINT_PANEL_WIDTH * HINT_PANEL_SCALE, HINT_PANEL_HEIGHT * HINT_PANEL_SCALE, 1)
       .color(0, 0, 0)
-      .opacity(0)
-      .txtr(HINT_CONFIG[title].POINT.id)
-    
+      .opacity(0);
+    const defaultTxtrId = getHintTextureId(title, "POINT");
+    if (defaultTxtrId != null) hint.txtr(defaultTxtrId);
+
     return hint;
   }
 
@@ -2125,8 +2222,13 @@ export const init = async (model) => {
       setHintVisible(hint, false);
       return;
     }
+    const txtrId = getHintTextureId(action[0], action[1]);
+    if (txtrId == null) {
+      setHintVisible(hint, false);
+      return;
+    }
     setHintVisible(hint, true);
-    hint.txtr(HINT_CONFIG[action[0]][action[1]].id)
+    hint.txtr(txtrId);
   }
 
   function setHintVisible(hint, visible) {
@@ -2136,18 +2238,30 @@ export const init = async (model) => {
   const selectHint = createControllerHint("SELECT");
   const grabHint = createControllerHint("GRAB");
   const saveHint = createControllerHint("SAVE");
+  const calibrateHint = createControllerHint("CALIBRATE");
 
   function updateControllerHints(anchorPos = null) {
     if (!anchorPos) {
       setHintVisible(selectHint, false);
       setHintVisible(grabHint, false);
       setHintVisible(saveHint, false);
+      setHintVisible(calibrateHint, false);
       return;
     }
 
-    placeHint(selectHint, anchorPos, HINT_CONFIG.SELECT.OFFSET);
-    placeHint(grabHint, anchorPos, HINT_CONFIG.GRAB.OFFSET);
-    placeHint(saveHint, anchorPos, HINT_CONFIG.SAVE.OFFSET);
+    placeHint(selectHint, anchorPos, getHintOffset("SELECT"));
+    placeHint(grabHint, anchorPos, getHintOffset("GRAB"));
+    placeHint(saveHint, anchorPos, getHintOffset("SAVE"));
+    placeHint(calibrateHint, anchorPos, getHintOffset("CALIBRATE"));
+
+    if (!computerCanvasPlacementConfirmed) {
+      setHintVisible(selectHint, false);
+      setHintVisible(grabHint, false);
+      setHintVisible(saveHint, false);
+      setHintVisible(calibrateHint, true);
+      updateHint(calibrateHint, ["CALIBRATE", "CONFIRM_COMPUTER_CANVAS"]);
+      return;
+    }
 
     const activeMarker =
       dragging && dragging.type === "marker" ? dragging.marker : hoveredMarker;
@@ -2194,6 +2308,8 @@ export const init = async (model) => {
       saveHint,
       hasAreaTexture(saveTargetArea) ? ["SAVE", "POINT"] : null
     );
+    setHintVisible(calibrateHint, true);
+    updateHint(calibrateHint, ["CALIBRATE", "CALIBRATE_COMPUTER_CANVAS"]);
   }
 
   const safeVibrate = (hand, intensity, duration) => {
@@ -2217,16 +2333,197 @@ export const init = async (model) => {
   let computerCanvasMarkerRoot = null;
   let computerCanvasHitVolume = null;
   let computerCanvasPreviewRoot = null;
+  let computerCanvasPlacementSquare = null;
+  let computerCanvasInstructionFront = null;
+  let computerCanvasInstructionBack = null;
+  let computerCanvasPlacementConfirmed = !isHeadsetClient;
+  let computerCanvasHalfWidth = COMPUTER_CANVAS_WIDTH * COMPUTER_CANVAS_SCALE;
+  let computerCanvasHalfHeight = COMPUTER_CANVAS_HEIGHT * COMPUTER_CANVAS_SCALE;
+  let computerCanvasCenter = COMPUTER_CANVAS_POS.slice();
+  let computerCanvasAxisX = [1, 0, 0];
+  let computerCanvasAxisY = [0, 1, 0];
+  let computerCanvasAxisZ = [0, 0, 1];
   const computerCanvasPreviewItems = new Map();
+
+  const safeNormalize = (v, fallback = [0, 0, 1]) => {
+    if (!v || v.length < 3) return fallback.slice();
+    const len = Math.hypot(v[0], v[1], v[2]);
+    if (!Number.isFinite(len) || len < 1e-6) return fallback.slice();
+    return [v[0] / len, v[1] / len, v[2] / len];
+  };
+
+  const getControllerWorldPosition = (hand) => {
+    const mat = clientState.hand(clientID, hand);
+    if (!mat || typeof mat.length !== "number") return null;
+    if (mat.length >= 16)
+      return [Number(mat[12]) || 0, Number(mat[13]) || 0, Number(mat[14]) || 0];
+    if (mat.length >= 3)
+      return [Number(mat[0]) || 0, Number(mat[1]) || 0, Number(mat[2]) || 0];
+    return null;
+  };
+
+  const getPlacementAxesFromController = () => {
+    const controllerMat =
+      clientState.hand(clientID, preferredHand) ||
+      clientState.hand(clientID, "right");
+    if (!controllerMat || typeof controllerMat.length !== "number" || controllerMat.length < 16) {
+      return {
+        x: computerCanvasAxisX.slice(),
+        y: computerCanvasAxisY.slice(),
+        z: computerCanvasAxisZ.slice(),
+      };
+    }
+    let axisX = safeNormalize(
+      [controllerMat[0], controllerMat[1], controllerMat[2]],
+      computerCanvasAxisX
+    );
+    let axisZ = safeNormalize(
+      [-controllerMat[8], -controllerMat[9], -controllerMat[10]],
+      computerCanvasAxisZ
+    );
+    let axisY = safeNormalize(cg.cross(axisZ, axisX), computerCanvasAxisY);
+    axisX = safeNormalize(cg.cross(axisY, axisZ), axisX);
+    return { x: axisX, y: axisY, z: axisZ };
+  };
+
+  const applyComputerCanvasMarkerTransform = (
+    center,
+    halfWidth,
+    halfHeight,
+    axes = null
+  ) => {
+    if (!computerCanvasMarkerRoot) return;
+    computerCanvasCenter = [
+      Number(center[0]) || COMPUTER_CANVAS_POS[0],
+      Number(center[1]) || COMPUTER_CANVAS_POS[1],
+      Number(center[2]) || COMPUTER_CANVAS_POS[2],
+    ];
+    computerCanvasHalfWidth = cg.clamp(
+      Number(halfWidth) || COMPUTER_CANVAS_WIDTH * COMPUTER_CANVAS_SCALE,
+      COMPUTER_CANVAS_MIN_HALF_WIDTH,
+      COMPUTER_CANVAS_MAX_HALF_WIDTH
+    );
+    computerCanvasHalfHeight = cg.clamp(
+      Number(halfHeight) || COMPUTER_CANVAS_HEIGHT * COMPUTER_CANVAS_SCALE,
+      COMPUTER_CANVAS_MIN_HALF_HEIGHT,
+      COMPUTER_CANVAS_MAX_HALF_HEIGHT
+    );
+    if (axes && axes.x && axes.y && axes.z) {
+      computerCanvasAxisX = safeNormalize(axes.x, computerCanvasAxisX);
+      computerCanvasAxisY = safeNormalize(axes.y, computerCanvasAxisY);
+      computerCanvasAxisZ = safeNormalize(axes.z, computerCanvasAxisZ);
+    }
+    computerCanvasMarkerRoot.setMatrix([
+      computerCanvasAxisX[0] * computerCanvasHalfWidth,
+      computerCanvasAxisX[1] * computerCanvasHalfWidth,
+      computerCanvasAxisX[2] * computerCanvasHalfWidth,
+      0,
+      computerCanvasAxisY[0] * computerCanvasHalfHeight,
+      computerCanvasAxisY[1] * computerCanvasHalfHeight,
+      computerCanvasAxisY[2] * computerCanvasHalfHeight,
+      0,
+      computerCanvasAxisZ[0] * COMPUTER_CANVAS_HALF_DEPTH,
+      computerCanvasAxisZ[1] * COMPUTER_CANVAS_HALF_DEPTH,
+      computerCanvasAxisZ[2] * COMPUTER_CANVAS_HALF_DEPTH,
+      0,
+      computerCanvasCenter[0],
+      computerCanvasCenter[1],
+      computerCanvasCenter[2],
+      1,
+    ]);
+  };
+
+  const updateComputerCanvasPlacementSquare = (visible = true) => {
+    if (!computerCanvasPlacementSquare) return;
+    const instructionSizeWorld =
+      Math.max(HINT_PANEL_WIDTH, HINT_PANEL_HEIGHT) * HINT_PANEL_SCALE;
+    const sx = cg.clamp(
+      instructionSizeWorld / Math.max(0.0001, computerCanvasHalfWidth),
+      0.03,
+      0.95
+    );
+    const sy = cg.clamp(
+      instructionSizeWorld / Math.max(0.0001, computerCanvasHalfHeight),
+      0.03,
+      0.95
+    );
+    computerCanvasPlacementSquare
+      .identity()
+      .move(0, 0, 1.003)
+      .scale(sx, sy, 1)
+      .color(0.2, 0.95, 1.6)
+      .opacity(visible ? 0.55 : 0)
+      .dull();
+    if (computerCanvasInstructionFront) {
+      computerCanvasInstructionFront
+        .identity()
+        .move(0, 0, 1.006)
+        .scale(sx, sy, 1)
+        .color(1, 1, 1)
+        .opacity(visible ? 0.98 : 0)
+        .dull();
+    }
+    if (computerCanvasInstructionBack) {
+      computerCanvasInstructionBack
+        .identity()
+        .move(0, 0, 1.006)
+        .turnY(Math.PI)
+        .scale(sx, sy, 1)
+        .color(1, 1, 1)
+        .opacity(visible ? 0.98 : 0)
+        .dull();
+    }
+  };
+
+  const isComputerCanvasConfirmPressed = () => {
+    const indices = [COMPUTER_CANVAS_CONFIRM_BUTTON, 4];
+    for (const idx of indices) {
+      const state = clientState.button(clientID, "right", idx);
+      const fromClientState =
+        !!state &&
+        (state === true ||
+          state.pressed ||
+          (typeof state.value === "number" &&
+            state.value >= ACTION_BUTTON_THRESHOLD));
+      if (fromClientState) return true;
+    }
+    return isAnyButtonPressed("right", indices, 0.55);
+  };
+
+  const updateComputerCanvasPlacementCalibration = () => {
+    if (computerCanvasPlacementConfirmed) {
+      updateComputerCanvasPlacementSquare(false);
+      return;
+    }
+    const topLeft = getControllerWorldPosition("left");
+    const bottomRight = getControllerWorldPosition("right");
+    if (!topLeft || !bottomRight) {
+      updateComputerCanvasPlacementSquare(true);
+      return;
+    }
+    const axes = getPlacementAxesFromController();
+    const topU = cg.dot(topLeft, axes.x);
+    const topV = cg.dot(topLeft, axes.y);
+    const topW = cg.dot(topLeft, axes.z);
+    const bottomU = cg.dot(bottomRight, axes.x);
+    const bottomV = cg.dot(bottomRight, axes.y);
+    const bottomW = cg.dot(bottomRight, axes.z);
+    const centerU = (topU + bottomU) * 0.5;
+    const centerV = (topV + bottomV) * 0.5;
+    const centerW = (topW + bottomW) * 0.5;
+    const center = [
+      axes.x[0] * centerU + axes.y[0] * centerV + axes.z[0] * centerW,
+      axes.x[1] * centerU + axes.y[1] * centerV + axes.z[1] * centerW,
+      axes.x[2] * centerU + axes.y[2] * centerV + axes.z[2] * centerW,
+    ];
+    const halfWidth = Math.abs(bottomU - topU) * 0.5;
+    const halfHeight = Math.abs(topV - bottomV) * 0.5;
+    applyComputerCanvasMarkerTransform(center, halfWidth, halfHeight, axes);
+    updateComputerCanvasPlacementSquare(true);
+  };
+
   function createComputerCanvasMarker() {
-    const root = model
-      .add()
-      .move(COMPUTER_CANVAS_POS[0], COMPUTER_CANVAS_POS[1], COMPUTER_CANVAS_POS[2])
-      .scale(
-        COMPUTER_CANVAS_WIDTH * COMPUTER_CANVAS_SCALE,
-        COMPUTER_CANVAS_HEIGHT * COMPUTER_CANVAS_SCALE,
-        COMPUTER_CANVAS_HALF_DEPTH
-      );
+    const root = model.add();
     const volume = root
       .add("cube")
       .color(0.0, 0.9, 1.2)
@@ -2247,13 +2544,44 @@ export const init = async (model) => {
     for (const y of [-1, 1]) for (const z of [-1, 1]) addEdge(0, y, z, 1, edgeT, edgeT);
     for (const x of [-1, 1]) for (const z of [-1, 1]) addEdge(x, 0, z, edgeT, 1, edgeT);
     for (const x of [-1, 1]) for (const y of [-1, 1]) addEdge(x, y, 0, edgeT, edgeT, 1);
-    return { root, volume };
+    const placementSquare = root
+      .add("square")
+      .color(0.2, 0.95, 1.6)
+      .opacity(0.55)
+      .dull();
+    placementSquare.computerCanvasPlacementName = COMPUTER_CANVAS_PLACEMENT_NAME;
+    const instructionFront = root
+      .add("square")
+      .color(1, 1, 1)
+      .opacity(0)
+      .dull();
+    const instructionBack = root
+      .add("square")
+      .turnY(Math.PI)
+      .color(1, 1, 1)
+      .opacity(0)
+      .dull();
+    return { root, volume, placementSquare, instructionFront, instructionBack };
   }
   {
+    model.txtrSrc(COMPUTER_CANVAS_INSTRUCTION.id, COMPUTER_CANVAS_INSTRUCTION.texture);
     const marker = createComputerCanvasMarker();
     computerCanvasMarkerRoot = marker.root;
     computerCanvasHitVolume = marker.volume;
+    computerCanvasPlacementSquare = marker.placementSquare;
+    computerCanvasInstructionFront = marker.instructionFront;
+    computerCanvasInstructionBack = marker.instructionBack;
+    if (computerCanvasInstructionFront)
+      computerCanvasInstructionFront.txtr(COMPUTER_CANVAS_INSTRUCTION.id);
+    if (computerCanvasInstructionBack)
+      computerCanvasInstructionBack.txtr(COMPUTER_CANVAS_INSTRUCTION.id);
     computerCanvasPreviewRoot = computerCanvasMarkerRoot.add();
+    applyComputerCanvasMarkerTransform(
+      COMPUTER_CANVAS_POS,
+      COMPUTER_CANVAS_WIDTH * COMPUTER_CANVAS_SCALE,
+      COMPUTER_CANVAS_HEIGHT * COMPUTER_CANVAS_SCALE
+    );
+    updateComputerCanvasPlacementSquare(!computerCanvasPlacementConfirmed);
   }
 
   function getOrCreateComputerCanvasPreviewItem(itemId) {
@@ -2843,6 +3171,7 @@ export const init = async (model) => {
   let prevSelectPressed = false;
   let prevGrabPressed = false;
   let prevSavePressed = false;
+  let prevCanvasConfirmPressed = false;
   let inputPrimed = false;
 
   model.animate(() => {
@@ -3065,7 +3394,6 @@ export const init = async (model) => {
         if (
           !item ||
           !item.areaId ||
-          item.sourceClientID !== clientID ||
           !Number.isFinite(Number(item.x)) ||
           !Number.isFinite(Number(item.y))
         )
@@ -3084,6 +3412,7 @@ export const init = async (model) => {
       renderComputerCanvasBoard(sharedCaptureState.partnerBoard);
       if (!isHeadsetClient) drawPartnerCanvas(sharedCaptureState.partnerBoard);
       updateControllerHints(clientState.hand(clientID, preferredHand));
+      updateComputerCanvasPlacementCalibration();
 
       if (!dragging && hoveredMarker && model.time % 0.18 < 0.05)
         safeVibrate(preferredHand, 0.35, 25);
@@ -3112,7 +3441,53 @@ export const init = async (model) => {
       prevSavePressed = savePressed;
       const justGrabbed = inputPrimed && grabPressed && !prevGrabPressed;
       prevGrabPressed = grabPressed;
+      const canvasConfirmPressed = isComputerCanvasConfirmPressed();
+      const justCanvasConfirm =
+        inputPrimed && canvasConfirmPressed && !prevCanvasConfirmPressed;
+      prevCanvasConfirmPressed = canvasConfirmPressed;
       inputPrimed = true;
+
+      if (justCanvasConfirm) {
+        if (!computerCanvasPlacementConfirmed) {
+          computerCanvasPlacementConfirmed = true;
+          updateComputerCanvasPlacementSquare(false);
+          setCaptureDebug({
+            status: "computer-canvas-placement-confirmed",
+            lastError: null,
+          });
+          playUISound("capture");
+          safeVibrate(preferredHand, 1.0, 90);
+        } else {
+          computerCanvasPlacementConfirmed = false;
+          updateComputerCanvasPlacementSquare(true);
+          setCaptureDebug({
+            status: "computer-canvas-placement-editing",
+            lastError:
+              "Placement edit mode active. Move left/right controllers, then press right B to confirm.",
+          });
+          safeVibrate(preferredHand, 0.6, 40);
+        }
+      }
+
+      if (isHeadsetClient && !computerCanvasPlacementConfirmed) {
+        if (dragging) {
+          if (
+            dragging.type === "marker" &&
+            dragging.marker &&
+            dragging.marker !== hoveredMarker
+          )
+            setMarkerColor(dragging.marker);
+          dragging = null;
+        }
+        hoveredMarker = null;
+        hoveredArea = null;
+        setCaptureDebug({
+          status: "computer-canvas-placement-required",
+          lastError:
+            "Use left controller for top-left and right controller for bottom-right, then press right B to confirm.",
+        });
+        return;
+      }
 
       if ((justSelected || justGrabbed || justSaved) && queuedDownload) {
         const { url, filename } = queuedDownload;
