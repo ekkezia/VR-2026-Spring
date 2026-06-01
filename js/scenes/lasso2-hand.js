@@ -12,6 +12,7 @@ const CAPTURE_EDGE_THICKNESS = 0.0025;
 const SURFACE_OPACITY = 0.85;
 const SURFACE_HOVER_OPACITY = 0.4;
 const TEXTURED_SURFACE_OPACITY = 1;
+const TEXTURED_SURFACE_HOVER_OPACITY = 0.78;
 const CAPTURE_BURST_MS = 4500;
 const CAPTURE_POST_DETECT_HIDE_DELAY_MS = 55;
 const CAPTURE_BORDER_INSET_PX = 14;
@@ -54,6 +55,7 @@ const LEFT_INDEX_FLICK_MIN_AXIS_SPEED_MPS = 0.18;
 const LEFT_INDEX_FLICK_MIN_DIRECTION_CHANGES = 2;
 const LEFT_INDEX_FLICK_COOLDOWN_SECONDS = 1.0;
 const SAVE_TOAST_SECONDS = 3.0;
+const CAPTURE_SAFE_MODE_HIDE_TUTORIAL = true;
 const INDEX_HOLD_CYAN = [0.2, 0.95, 1.2];
 const INDEX_HOLD_GREY = [0.62, 0.62, 0.62];
 const INDEX_HOLD_YELLOW = [1.0, 0.9, 0.1];
@@ -150,6 +152,7 @@ let screenCaptureDebugPopup = null;
 let screenCaptureDebugPopupCanvas = null;
 let screenCaptureDebugPopupCtx = null;
 let pendingCaptureArea = null;
+let captureSafeModeActive = false;
 let queuedDownload = null;
 let captureBurstDeadline = 0;
 let activeCaptureRequest = null;
@@ -1595,7 +1598,8 @@ export const init = async (model) => {
 
 	function shouldExposeCapturedHandles(area) {
 		if (!area) return false;
-		// After corners are locked, briefly hide target border so it won't leak.
+		// After we lock border corners, hide target border for one short delay
+		// before capture so the border itself does not leak into the texture.
 		if (
 			pendingCaptureArea &&
 			stagedCaptureCorners &&
@@ -1667,7 +1671,9 @@ export const init = async (model) => {
 			area.capturePending && !hasTexture
 				? 0
 				: hasTexture
-				? TEXTURED_SURFACE_OPACITY
+				? isHoveredSurface
+					? TEXTURED_SURFACE_HOVER_OPACITY
+					: TEXTURED_SURFACE_OPACITY
 				: isHoveredSurface
 				? SURFACE_HOVER_OPACITY
 				: SURFACE_OPACITY,
@@ -1723,6 +1729,7 @@ export const init = async (model) => {
 		if (!area) return;
 		setAreaCaptureState(area, false);
 		if (pendingCaptureArea === area) pendingCaptureArea = null;
+		if (!pendingCaptureArea) captureSafeModeActive = false;
 		if (!pendingCaptureArea) resetStagedCapture();
 		refreshAllMarkerColors();
 	}
@@ -1947,6 +1954,9 @@ export const init = async (model) => {
 		if (!area) return;
 		instructionTaskState.capturePressed = true;
 		resetStagedCapture();
+		captureSafeModeActive = CAPTURE_SAFE_MODE_HIDE_TUTORIAL;
+		if (typeof applyCaptureSafeUiVisibilityNow === 'function')
+			applyCaptureSafeUiVisibilityNow();
 		if (pendingCaptureArea && pendingCaptureArea !== area)
 			setAreaCaptureState(pendingCaptureArea, false);
 			pendingCaptureArea = area;
@@ -1967,6 +1977,7 @@ export const init = async (model) => {
 		if (!pendingCaptureArea) return;
 		setAreaCaptureState(pendingCaptureArea, false);
 		pendingCaptureArea = null;
+		captureSafeModeActive = false;
 		resetStagedCapture();
 		refreshAllMarkerColors();
 		captureBurstDeadline = 0;
@@ -2598,10 +2609,23 @@ export const init = async (model) => {
 			instructionVisible = false;
 			return;
 		}
-		instructionPageIndex = Math.min(
+		const nextIndex = Math.min(
 			instructionPageIndex + 1,
 			Math.max(0, instructionPageCount - 1),
 		);
+		instructionPageIndex = nextIndex;
+		// Require the user to complete each task after they arrive on that step.
+		// This prevents skipping (for example CALIBRATE -> QUAD) from stale flags.
+		if (nextIndex === INSTRUCTION_STEP.CALIBRATE) {
+			instructionTaskState.calibrationStarted = false;
+			instructionTaskState.calibrated = false;
+		} else if (nextIndex === INSTRUCTION_STEP.QUAD) {
+			instructionTaskState.quadCreated = false;
+		} else if (nextIndex === INSTRUCTION_STEP.CAPTURE) {
+			instructionTaskState.capturePressed = false;
+		} else if (nextIndex === INSTRUCTION_STEP.DROP) {
+			instructionTaskState.droppedToCanvas = false;
+		}
 	};
 	const isClientComputerConnected = () => {
 		if (typeof clients !== 'undefined' && Array.isArray(clients))
@@ -2661,9 +2685,17 @@ export const init = async (model) => {
 		if (Array.isArray(fallback) && fallback[index] != null) return fallback[index];
 		return null;
 	};
-	const updateInstructionOverlay = (mode) => {
-		instructionButtonVisible = shouldShowInstructionButton();
+	const updateInstructionOverlay = (mode, suppressTutorial = false) => {
+		instructionButtonVisible = !suppressTutorial && shouldShowInstructionButton();
 		if (!instructionVisible || instructionPageCount <= 0) {
+			instructionButtonHovered = false;
+			instructionRoot.identity().move(0, -10, 0).scale(0.0001);
+			instructionPanel.opacity(0);
+			instructionButtonPanel.opacity(0);
+			instructionProgressRoot.opacity(0);
+			return;
+		}
+		if (suppressTutorial) {
 			instructionButtonHovered = false;
 			instructionRoot.identity().move(0, -10, 0).scale(0.0001);
 			instructionPanel.opacity(0);
@@ -3396,12 +3428,31 @@ export const init = async (model) => {
 			computerCanvasInstructionHint,
 			defaultInstructionHintPath,
 		);
+	function applyCaptureSafeUiVisibilityNow() {
+		instructionButtonHovered = false;
+		instructionRoot.identity().move(0, -10, 0).scale(0.0001);
+		instructionPanel.opacity(0);
+		instructionButtonPanel.opacity(0);
+		instructionProgressRoot.opacity(0);
+		setHintVisible(selectHint, false);
+		setHintVisible(selectHintLeft, false);
+		setHintVisible(grabHint, false);
+		setHintVisible(saveHint, false);
+		setHintVisible(saveToastHint, false);
+		setHintVisible(calibrateHint, false);
+		setHintVisible(computerCanvasInstructionHint, false);
+	}
 
 	function updateControllerHints(
 		anchorPos = null,
 		leftAnchorPos = null,
 		inputMode = 'controller',
+		suppressTutorial = false,
 	) {
+		if (suppressTutorial) {
+			applyCaptureSafeUiVisibilityNow();
+			return;
+		}
 		currentHintInputMode = inputMode === 'hand' ? 'hand' : 'controller';
 		const instructionTxtrPath = getInstructionTexturePath(currentHintInputMode);
 		if (
@@ -4861,11 +4912,11 @@ export const init = async (model) => {
 	// ─── Animate loop ─────────────────────────────────────────────────────────
 
 let prevSelectPressed = false;
-let prevGrabPressed = false;
-let prevInstructionSelectPressed = false;
-let prevInstructionHoverInHandMode = false;
-let instructionHoverAdvanceCooldownUntil = 0;
-let prevSavePressed = false;
+	let prevGrabPressed = false;
+	let prevInstructionSelectPressed = false;
+	let prevInstructionHoverInHandMode = false;
+	let instructionHoverAdvanceCooldownUntil = 0;
+	let prevSavePressed = false;
 	let prevCanvasConfirmPressed = false;
 	let inputPrimed = false;
 	let calibrationGestureCooldownUntil = 0;
@@ -5018,8 +5069,11 @@ let prevSavePressed = false;
 				instructionTaskState.droppedToCanvas =
 					instructionTaskState.droppedToCanvas ||
 					completedAreas.some((area) => !!area && !!area.partnerPlaced);
+				captureSafeModeActive =
+					CAPTURE_SAFE_MODE_HIDE_TUTORIAL &&
+					(!!pendingCaptureArea || !!activeCaptureRequest);
 				maybeAdvanceInstructionByTask();
-				updateInstructionOverlay(instructionMode);
+				updateInstructionOverlay(instructionMode, captureSafeModeActive);
 
 				if (
 					sharedCaptureState.request &&
@@ -5351,7 +5405,12 @@ let prevSavePressed = false;
 				? currentLeftHandAnchor || lastLeftHintAnchor
 				: controllerMatrix.left;
 			const hintInputMode = handFallbackActive ? 'hand' : 'controller';
-			updateControllerHints(rightHintAnchor, leftHintAnchor, hintInputMode);
+			updateControllerHints(
+				rightHintAnchor,
+				leftHintAnchor,
+				hintInputMode,
+				captureSafeModeActive,
+			);
 			updateComputerCanvasPlacementCalibration();
 
 			if (!dragging && hoveredMarker && model.time % 0.18 < 0.05)
@@ -5453,7 +5512,20 @@ let prevSavePressed = false;
 			const bothPinching =
 				hasTrackedHandPose && leftPinchState && rightPinchState;
 			const justBothPinching = bothPinching && calibrationGestureArmed;
-			if (handFallbackActive && hasTrackedHandPose && !leftPinchState && !rightPinchState)
+			const canArmCalibrationGesture =
+				handFallbackActive &&
+				computerCanvasPlacementConfirmed &&
+				!dragging &&
+				!hoveredMarker &&
+				!hoveredArea &&
+				!pendingCaptureArea &&
+				currentMarkers.length === 0;
+			if (
+				canArmCalibrationGesture &&
+				hasTrackedHandPose &&
+				!leftPinchState &&
+				!rightPinchState
+			)
 				calibrationGestureArmed = true;
 			else if (!handFallbackActive) calibrationGestureArmed = false;
 			const inCalibrationCooldown =
@@ -5462,6 +5534,7 @@ let prevSavePressed = false;
 				handFallbackActive &&
 				computerCanvasPlacementConfirmed &&
 				calibrationGestureArmed &&
+				canArmCalibrationGesture &&
 				justBothPinching &&
 				bothPinching &&
 				!inCalibrationCooldown;

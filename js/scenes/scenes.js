@@ -54,13 +54,11 @@ export default () => {
          { name: "widgets"      , path: "./widgets.js"      , public: true },
          { name: "transfer"     , path: "./transfer.js"     , public: true },
 
-		 { name: "lasso"      , path: "./lasso.js"      , public: true },
-		 { name: "lasso2"     , path: "./lasso2.js"     , public: true },
-		 { name: "lasso3"     , path: "./lasso3.js"      , public: true },
-		 { name: "lasso4"     , path: "./lasso4.js"      , public: true },
-		 { name: "tutorial"   , path: "./tutorial.js"    , public: true },
-		  { name: "lasso-strict"   , path: "./lasso-strict.js"    , public: true },
+		 { name: "cleaning"      , path: "./cleaning.js"      , public: true },
+		//  { name: "lasso"      , path: "./lasso.js"      , public: true },
+		//  { name: "lasso2"     , path: "./lasso2.js"     , public: true },
+		//  { name: "lasso2-recttest"     , path: "./lasso2-recttest.js"     , public: true },
+		  { name: "lasso-hand"   , path: "./lasso2-hand.js"    , public: true },
       ]
    };
 }
-

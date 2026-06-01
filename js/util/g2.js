@@ -144,7 +144,8 @@ export function G2(do_not_animate_flag=false, canvasWidth=512, canvasHeight) {
       this.obj = obj;
       this.state = 0;
       g2.textHeight(.09 * size);
-      let w = textWidth(label[0]) + .02 * size, h = .1 * size;
+      let currentLabel = () => Array.isArray(label) ? label[this.state] : label;
+      let w = textWidth(currentLabel()) + .02 * size, h = .1 * size;
       this.setLabel = str => label = str;
       this.isWithin = () => {
          let uvz = g2.getUVZ(obj);
@@ -159,7 +160,7 @@ export function G2(do_not_animate_flag=false, canvasWidth=512, canvasHeight) {
          }
       }
       this.draw = () => {
-         w = textWidth(label[this.state]) + .02 * size;
+         w = textWidth(currentLabel()) + .02 * size;
          let isPressed = this == activeWidget && (mouseState == 'press' || mouseState == 'drag');
          g2.textHeight(.045 * size);
          g2.setColor(color, isPressed ? .5 : this.isWithin() ? .7 : 1);
@@ -633,4 +634,3 @@ export function G2(do_not_animate_flag=false, canvasWidth=512, canvasHeight) {
 }
 
 export let g2 = new G2();
-
