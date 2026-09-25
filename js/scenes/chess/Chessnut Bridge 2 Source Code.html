@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Chessnut Move Bridge (chess2)</title>
+<style>
+  body { font-family: monospace; background: #111; color: #ddd; padding: 2em; }
+  button { font-size: 1.1em; padding: .5em 1em; margin-right: 1em; }
+  #status span { padding: .2em .6em; border-radius: .3em; }
+  .ok { background: #163; }
+  .bad { background: #611; }
+  #log { margin-top: 1em; height: 60vh; overflow-y: auto; white-space: pre-wrap; font-size: .9em; border: 1px solid #444; padding: .5em; }
+</style>
+</head>
+<body>
+
+<h2>Chessnut Move Bridge (chess2)</h2>
+<p>
+  Leave this tab open on the machine sitting next to the physical board.
+  It watches the VR chess2 scene's shared state and drives the board over Bluetooth.
+  Chrome or Edge only (<a href="https://urldefense.proofpoint.com/v2/url?u=https-3A__caniuse.com_web-2Dbluetooth&amp;d=DwMGAg&amp;c=slrrB7dE8n7gBJbeO0g-IQ&amp;r=PEc7fDHfban5W0C6J2YLPg&amp;m=2IM9tyFxFJkojhgw9qCZl1eTVVrXemj-DZkz1gNLMLAOPxoEi0ORMVGsnKqAf3Ct&amp;s=itKI6HQsS617lsgUfI5gtxHtFwspDlL8qvf7eOvZ4fk&amp;e=" style="color:#8cf">Web Bluetooth</a> is not supported in Firefox/Safari, and generally not inside a VR headset's browser).
+</p>
+
+<button id="btnRelay">Connect to VR relay</button>
+<button id="btnBoard">Pair with Chessnut Move</button>
+
+<div id="status">
+  relay: <span id="relayStatus" class="bad">disconnected</span>
+  &nbsp; board: <span id="boardStatus" class="bad">disconnected</span>
+</div>
+
+<div id="log"></div>
+
+<script>
+// Bridges the VR chess2 scene (js/scenes/chess2.js + board_analysis.js) to a physical
+// Chessnut Move robotic board over Web Bluetooth, from a normal browser tab.
+//
+// It does NOT touch chess2.js/board_analysis.js: it connects to the same WebSocket
+// relay those scenes use (see server/client.js's broadcastGlobal/synchronize) as a
+// silent extra client, watches for pieceInfo2.fen changes, and tells the board to
+// auto-move into that position.
+//
+// This is the chess2 counterpart to chessnutBridge.html - identical in every
+// respect except it listens for chess2.js's independent 'pieceInfo2' state
+// instead of chess.js's 'pieceInfo', so the two scenes/boards never collide.
+//
+// Protocol constants below come from the manufacturer's spec:
+// https://github.com/chessnutech/chess_move_api
+
+const DEVICE_NAME = 'Chessnut Move';
+const FEN_SERVICE_UUID       = '1b7e8261-2877-41c3-b46e-cf057c562023';
+const FEN_NOTIFY_CHAR_UUID   = '1b7e8262-2877-41c3-b46e-cf057c562023';
+const OPS_SERVICE_UUID       = '1b7e8271-2877-41c3-b46e-cf057c562023';
+const OPS_WRITE_CHAR_UUID    = '1b7e8272-2877-41c3-b46e-cf057c562023';
+const OPS_NOTIFY_CHAR_UUID   = '1b7e8273-2877-41c3-b46e-cf057c562023';
+
+// index 0 = empty square; 1-12 map to pieces per the board's own encoding
+const PIECE_TO_CODE = { '': 0, q: 1, k: 2, b: 3, p: 4, n: 5, R: 6, P: 7, r: 8, B: 9, N: 10, Q: 11, K: 12 };
+const CODE_TO_PIECE = ['', 'q', 'k', 'b', 'p', 'n', 'R', 'P', 'r', 'B', 'N', 'Q', 'K'];
+
+// Board bytes are packed two squares per byte (4 bits each), ordered rank8->rank1,
+// and within a rank the manufacturer's own decode example reads squares h->a (not a->h).
+// This encoder mirrors that exact indexing so it round-trips with their decode logic -
+// verify against a live board (see the log-fen checkbox) before trusting it blindly.
+function fenToBoardBytes(fen) {
+  const ranks = fen.split(' ')[0].split('/'); // ranks[0] = rank 8 ... ranks[7] = rank 1
+  const grid = ranks.map(rank => {
+    const row = [];
+    for (const ch of rank) {
+      if (/[1-8]/.test(ch)) { for (let i = 0; i < Number(ch); i++) row.push(''); }
+      else row.push(ch);
+    }
+    return row; // row[0] = file a ... row[7] = file h
+  });
+
+  const data = new Array(32).fill(0);
+  for (let row = 0; row < 8; row++) {
+    for (let col = 7; col >= 0; col--) {
+      const file = 7 - col; // decode builds the rank string left-to-right as col goes 7->0
+      const code = PIECE_TO_CODE[grid[row][file]] ?? 0;
+      const index = Math.floor((row * 8 + col) / 2);
+      if (col % 2 === 0) data[index] = (data[index] & 0xf0) | code;
+      else data[index] = (data[index] & 0x0f) | (code << 4);
+    }
+  }
+  return data;
+}
+
+function boardBytesToFen(data) {
+  // inverse of fenToBoardBytes, used to sanity-check what the board itself reports
+  let fen = '';
+  for (let row = 0; row < 8; row++) {
+    let empty = 0, rankStr = '';
+    for (let col = 7; col >= 0; col--) {
+      const index = Math.floor((row * 8 + col) / 2);
+      const code = col % 2 === 0 ? data[index] & 0x0f : data[index] >> 4;
+      const piece = CODE_TO_PIECE[code] || '';
+      if (piece === '') empty++;
+      else { if (empty > 0) { rankStr += empty; empty = 0; } rankStr += piece; }
+    }
+    if (empty > 0) rankStr += empty;
+    fen += rankStr + (row < 7 ? '/' : '');
+  }
+  return fen;
+}
+
+function buildAutoMoveCommand(fen, forceFlag = 0) {
+  return new Uint8Array([0x42, 0x21, ...fenToBoardBytes(fen), forceFlag]);
+}
+
+const ENABLE_FEN_REPORTING = new Uint8Array([0x21, 0x01, 0x00]);
+const READ_BATTERY = new Uint8Array([0x41, 0x01, 0x0c]);
+const READ_PIECE_STATUS = new Uint8Array([0x41, 0x01, 0x0b]);
+
+// ---- LEDs: mirror chess2.js's on-screen reticle onto the board ------------
+// Command: [0x43, 0x20, ...34 bytes], same "two squares per byte, FEN order"
+// packing as fenToBoardBytes (rank8->rank1, and within a rank h->a as the col
+// counts down) - just with a 2-bit LED color nibble (0 off/1 red/2 green/3 blue)
+// instead of a piece code.
+const LED_OFF = 0, LED_RED = 1, LED_BLUE = 3;
+
+function squareToLedSlot(square) {
+  const file = square.charCodeAt(0) - 97;       // 0-7, a-h
+  const rank = parseInt(square.slice(1), 10);   // 1-8
+  const row = 8 - rank;                         // 0 = rank 8 ... 7 = rank 1
+  const col = 7 - file;                         // mirrors fenToBoardBytes' file = 7 - col
+  return { index: Math.floor((row * 8 + col) / 2), highNibble: col % 2 !== 0 };
+}
+
+function buildLedCommand(squareColors) {
+  const data = new Array(32).fill(0);
+  for (const square in squareColors) {
+    const { index, highNibble } = squareToLedSlot(square);
+    const color = squareColors[square];
+    data[index] = highNibble ? (data[index] & 0x0f) | (color << 4)
+                              : (data[index] & 0xf0) | color;
+  }
+  return new Uint8Array([0x43, 0x20, ...data]);
+}
+
+// Same "collapse bursts to just the latest, one write at a time" shape as
+// sendMove, since the pointer state can change every VR frame while nothing
+// needs a doubled write here (no "armed" quirk like auto-move has).
+let ledWriteBusy = false;
+let pendingLedState = null;
+
+async function sendLedState(state) {
+  pendingLedState = state;
+  if (ledWriteBusy) return;
+  ledWriteBusy = true;
+  while (pendingLedState !== null) {
+    const toSend = pendingLedState;
+    pendingLedState = null;
+    const colors = {};
+    for (const sq of toSend.legalDestinations || []) colors[sq] = LED_BLUE;
+    if (toSend.pointedSquare) colors[toSend.pointedSquare] = LED_RED; // red wins if it overlaps a legal square, matching the VR highlight
+    await writeCommand(buildLedCommand(colors));
+  }
+  ledWriteBusy = false;
+}
+
+// ---- live piece position tracking (visualization only) --------------------
+// Fixed 34-slot order the board reports piece status in (see manufacturer spec).
+const PIECE_SLOT_ORDER = ['P','P','P','P','P','P','P','P','R','R','N','N','B','B','Q','Q','K',
+                           'p','p','p','p','p','p','p','p','r','r','n','n','b','b','q','q','k'];
+const PIECE_ID_NAMES = { 1: 'WP', 2: 'WR', 3: 'WN', 4: 'WB', 5: 'WQ', 6: 'WK',
+                          7: 'bp', 8: 'br', 9: 'bn', 10: 'bb', 11: 'bq', 12: 'bk' };
+
+function parsePieceStatus(data) {
+  // Response: [0x41, 0x89, 0x0b, ...34 pieces x {identity, x, y, bat}]
+  const pieces = [];
+  for (let i = 0; i < 34; i++) {
+    const off = 3 + i * 4;
+    if (off + 3 >= data.length) break;
+    const id = data[off];
+    pieces.push({
+      slot: i,
+      slotLabel: PIECE_SLOT_ORDER[i],
+      idLabel: PIECE_ID_NAMES[id] || `id${id}`,
+      x: data[off + 1],
+      y: data[off + 2],
+      bat: data[off + 3],
+    });
+  }
+  return pieces;
+}
+
+// Coordinates are normalized 0-255 across the 8x8 board; a still piece still
+// jitters by a few units, so only count it as "actively moving" past this
+// delta, and cap logging at 5 samples per movement streak (reset once the
+// piece goes still again) so a single move doesn't flood the log.
+const PIECE_MOVE_THRESHOLD = 6;
+const PIECE_MOVE_LOG_LIMIT = 5;
+let lastPiecePositions = null; // slot -> {x, y}
+let pieceMoveStreak = new Array(34).fill(0);
+
+function trackPieceMovement(pieces) {
+  if (!lastPiecePositions) {
+    lastPiecePositions = pieces.map(p => ({ x: p.x, y: p.y }));
+    return;
+  }
+  pieces.forEach((p, i) => {
+    const last = lastPiecePositions[i];
+    const moved = Math.abs(p.x - last.x) + Math.abs(p.y - last.y) > PIECE_MOVE_THRESHOLD;
+    if (moved) {
+      if (pieceMoveStreak[i] < PIECE_MOVE_LOG_LIMIT) {
+        pieceMoveStreak[i]++;
+        log(`piece moving: ${p.idLabel} (slot ${i}, starts as "${p.slotLabel}") -> x=${p.x} y=${p.y}  battery=${p.bat}%`);
+      }
+    } else {
+      pieceMoveStreak[i] = 0;
+    }
+    lastPiecePositions[i] = { x: p.x, y: p.y };
+  });
+}
+
+// A fixed-interval timer here would fire every tick regardless of whether the
+// previous poll's write actually finished - since a real BLE write+response
+// round-trip is typically tens of ms (much slower than a 60fps 16.7ms budget),
+// that would just pile up ever-more-backlogged requests in writeCommand's
+// queue instead of actually polling faster. Self-scheduling each next poll
+// only once the previous one completes gives the true achievable rate,
+// capped at 60Hz (VR's target frame rate) rather than blindly exceeding it.
+const PIECE_STATUS_POLL_MS = 1000 / 60;
+let pieceStatusPollActive = false;
+
+async function pieceStatusPollLoop() {
+  while (pieceStatusPollActive) {
+    const start = performance.now();
+    if (opsWriteChar && !writeBusy) await writeCommand(READ_PIECE_STATUS, { silent: true });
+    const wait = PIECE_STATUS_POLL_MS - (performance.now() - start);
+    if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+  }
+}
+
+function startPieceStatusPolling() {
+  if (pieceStatusPollActive) return;
+  pieceStatusPollActive = true;
+  pieceStatusPollLoop();
+}
+function stopPieceStatusPolling() {
+  pieceStatusPollActive = false;
+  lastPiecePositions = null;
+  pieceMoveStreak.fill(0);
+}
+
+// ---- logging / status UI -------------------------------------------------
+
+const logEl = document.getElementById('log');
+const t0 = performance.now();
+function log(msg) {
+  const line = `[+${((performance.now() - t0) / 1000).toFixed(2)}s] ${msg}`;
+  console.log(line);
+  logEl.textContent += line + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function hex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+}
+function setStatus(id, connected, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = connected ? 'ok' : 'bad';
+}
+
+// ---- Bluetooth side -------------------------------------------------------
+
+let opsWriteChar = null;
+
+// Web Bluetooth rejects a write started while another is still in flight on the
+// same device ("GATT operation already in progress"). writeCommand has several
+// independent callers (sendMove's move writes, the piece-status poller, the
+// one-off battery/enable-fen writes at connect time) that don't know about each
+// other, so a per-caller busy flag isn't enough - a poll write can already be
+// awaiting its BLE round-trip when a move write fires and collide with it. Chain
+// every call through this single queue so at most one write is ever in flight,
+// regardless of who requested it.
+let writeQueueTail = Promise.resolve();
+
+function writeCommand(bytes, { silent = false } = {}) {
+  const run = async () => {
+    if (!opsWriteChar) { if (!silent) log('board not connected yet, dropping command'); return; }
+    const label = bytes.length > 10 ? `auto-move (${bytes.length}B)` : hex(bytes);
+    if (!silent) log(`write start: ${label}`);
+    try {
+      if (opsWriteChar.writeValueWithResponse) await opsWriteChar.writeValueWithResponse(bytes);
+      else await opsWriteChar.writeValue(bytes);
+      if (!silent) log(`write done: ${label}`);
+    } catch (e) {
+      if (!silent) log(`write FAILED: ${label} - ` + e.message);
+    }
+  };
+  const result = writeQueueTail.then(run, run);
+  writeQueueTail = result;
+  return result;
+}
+
+// Web Bluetooth rejects a write started while another is still in flight
+// ("GATT operation already in progress"), which silently dropped moves made
+// while the board was mid-write to a prior position. This serializes writes
+// and always keeps only the newest pending fen, so a burst of quick VR moves
+// converges on the latest position instead of getting stuck one move behind.
+let writeBusy = false;
+let pendingFen = null;
+
+async function sendMove(fen) {
+  pendingFen = fen;
+  if (writeBusy) return;
+  writeBusy = true;
+  while (pendingFen !== null) {
+    const toSend = pendingFen;
+    pendingFen = null;
+    // Observed on the physical board: an auto-move command doesn't execute
+    // immediately - it appears to sit "armed" until a *second* auto-move
+    // command arrives, at which point the board executes the PREVIOUSLY
+    // armed target and re-arms the new one. Left alone, this leaves every
+    // move permanently one command behind (move N only ever moves once move
+    // N+1's command is sent). Sending the same target twice in a row flushes
+    // it immediately instead of waiting on the next real move to unblock it.
+    await writeCommand(buildAutoMoveCommand(toSend, 0));
+    await writeCommand(buildAutoMoveCommand(toSend, 0));
+  }
+  writeBusy = false;
+}
+
+function onOpsNotification(event) {
+  const data = new Uint8Array(event.target.value.buffer);
+  if (data[0] === 0x41 && data[1] === 0x03 && data[2] === 0x0c) {
+    log(`battery: ${data[4]}% ${data[3] ? '(charging)' : ''}`);
+  } else if (data[0] === 0x41 && data[1] === 0x89 && data[2] === 0x0b) {
+    const pieces = parsePieceStatus(data);
+    trackPieceMovement(pieces);
+    broadcastPhysicalPositions(pieces);
+  } else if (data[0] === 0x23 && data[1] === 0x01 && data[2] === 0x00) {
+    // Undocumented generic "command received" ack the board fires for every
+    // ops write - harmless, but with piece-status polling running at 5Hz this
+    // fires constantly, so swallow it instead of spamming the log.
+  } else {
+    // Undocumented by the manufacturer's spec - logging raw bytes to see if the
+    // board emits anything (e.g. a move-complete ack) we could react to.
+    log('ops notify: ' + hex(data));
+  }
+}
+
+async function connectToBoard() {
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: DEVICE_NAME }],
+      optionalServices: [FEN_SERVICE_UUID, OPS_SERVICE_UUID]
+    });
+
+    device.addEventListener('gattserverdisconnected', () => {
+      setStatus('boardStatus', false, 'disconnected');
+      opsWriteChar = null;
+      boardConnected = false;
+      stopPieceStatusPolling();
+      log('board disconnected');
+    });
+
+    log('connecting to ' + device.name + '...');
+    const server = await device.gatt.connect();
+
+    const opsService = await server.getPrimaryService(OPS_SERVICE_UUID);
+    opsWriteChar = await opsService.getCharacteristic(OPS_WRITE_CHAR_UUID);
+    const opsNotifyChar = await opsService.getCharacteristic(OPS_NOTIFY_CHAR_UUID);
+    await opsNotifyChar.startNotifications();
+    opsNotifyChar.addEventListener('characteristicvaluechanged', onOpsNotification);
+
+    const fenService = await server.getPrimaryService(FEN_SERVICE_UUID);
+    const fenNotifyChar = await fenService.getCharacteristic(FEN_NOTIFY_CHAR_UUID);
+    await fenNotifyChar.startNotifications();
+    fenNotifyChar.addEventListener('characteristicvaluechanged', event => {
+      const data = new Uint8Array(event.target.value.buffer);
+      //('board reports live fen: ' + boardBytesToFen(data.slice(2, 34)));
+    });
+
+    // Smoke test: confirms the BLE link works before any VR moves happen.
+    await writeCommand(READ_BATTERY);
+    await writeCommand(ENABLE_FEN_REPORTING);
+
+    setStatus('boardStatus', true, device.name);
+    boardConnected = true;
+    log('board ready, syncing to current VR position: ' + currentFen);
+    sendMove(currentFen);
+    sendLedState(currentPointerState);
+    startPieceStatusPolling();
+  } catch (e) {
+    log('board connect failed: ' + e.message);
+  }
+}
+
+document.getElementById('btnBoard').addEventListener('click', connectToBoard);
+
+// ---- relay (WebSocket) side ------------------------------------------------
+
+// The physical board never resets itself - whatever position it last executed
+// stays there until it's told otherwise. So we track the VR scene's current fen
+// independently of whether the board is connected yet, and push it in full the
+// moment the board pairs (see connectToBoard), instead of only reacting to the
+// next *change*. That's what makes "load the scene -> board goes to the start
+// position" work, and it re-syncs the board even if pairing happens mid-game.
+let currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'; // chess2.js's own default
+let boardConnected = false;
+let ws = null;
+
+function onFenUpdate(fen) {
+  if (fen === currentFen) return;
+  currentFen = fen;
+  if (!boardConnected) return;
+  log('position changed, sending to board: ' + fen);
+  sendMove(fen);
+}
+
+// Same "track regardless of connection, push once paired" approach as currentFen
+// above, for the pointed-at/legal-destination squares chess2.js broadcasts.
+let currentPointerState = { pointedSquare: null, legalDestinations: [] };
+
+function onPointerUpdate(state) {
+  currentPointerState = state;
+  if (!boardConnected) return;
+  sendLedState(currentPointerState);
+}
+
+// Pushes the board's live per-piece positions the other way across the same
+// relay, so chess2.js's instantMove=false mode can render pieces at their real
+// physical position instead of snapping straight to the destination square.
+// This is the one thing this page sends rather than just listens for, so it's
+// built by hand in the same {global, value} shape server.broadcastGlobal uses -
+// this page never loads server/client.js, just a raw WebSocket to the same relay.
+function broadcastPhysicalPositions(pieces) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const value = pieces.map(p => ({ slot: p.slot, x: p.x, y: p.y }));
+  ws.send(JSON.stringify({ global: 'chess2PhysicalPieces', value }));
+}
+
+function connectToRelay() {
+  // observer=1 tells the server to exclude this connection from the scene
+  // client/master-election list (see server/main.js's connection handler) - this
+  // tab never runs client.js's synchronize(), so it must never become the master
+  // client or get picked as the target of a needToUpdate handshake, either of
+  // which would silently stall pieceInfo2 sync for every real VR client.
+  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?observer=1';
+  ws = new WebSocket(url);
+
+  ws.addEventListener('open', () => {
+    setStatus('relayStatus', true, 'connected');
+    log('connected to relay: ' + url);
+  });
+
+  ws.addEventListener('message', event => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (e) { return; }
+    if (msg.global === 'pieceInfo2' && msg.value && msg.value.fen) {
+      onFenUpdate(msg.value.fen);
+    } else if (msg.global === 'chess2Pointer' && msg.value) {
+      onPointerUpdate(msg.value);
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    setStatus('relayStatus', false, 'disconnected');
+    log('relay disconnected, retrying in 3s...');
+    setTimeout(connectToRelay, 3000);
+  });
+  ws.addEventListener('error', () => ws.close());
+}
+
+document.getElementById('btnRelay').addEventListener('click', () => {
+  if (!ws || ws.readyState === WebSocket.CLOSED) connectToRelay();
+});
+
+if (!navigator.bluetooth) log('WARNING: navigator.bluetooth is unavailable - use Chrome or Edge, over HTTPS.');
+</script>
+</body>
+</html>
